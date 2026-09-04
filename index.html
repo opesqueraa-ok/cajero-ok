@@ -864,13 +864,13 @@ function renderPlanificacion(){
       botones = `
         <button class="btn btn-ghost btn-small" onclick="deshacerEjecucion('${p.id}')">↩️ Deshacer</button>
         <button class="btn btn-ghost btn-small" onclick="abrirRepetirPlan('${p.id}')">🔁 Repetir</button>
-        <button class="btn btn-ghost btn-small" onclick="editarPlan('${p.id}')">✏️ Editar</button>`;
+        <button class="btn btn-ghost btn-small" onclick="editarPlan('${p.id}')">✏️</button>`;
     } else {
       botones = `
         <button class="btn btn-ghost btn-small" onclick="reactivarPlan('${p.id}')">♻️ Reactivar</button>
         <button class="btn btn-ghost btn-small" onclick="abrirRepetirPlan('${p.id}')">🔁 Repetir</button>
-        <button class="btn btn-ghost btn-small" onclick="editarPlan('${p.id}')">✏️ Editar</button>
-        <button class="btn btn-danger btn-small" onclick="borrarPlan('${p.id}')">🗑️ Borrar</button>`;
+        <button class="btn btn-ghost btn-small" onclick="editarPlan('${p.id}')">✏️</button>
+        <button class="btn btn-danger btn-small" onclick="borrarPlan('${p.id}')">🗑️</button>`;
     }
     return `
     <div class="receipt ${personaClass(p.persona)}">
