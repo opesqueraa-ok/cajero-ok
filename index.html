@@ -351,6 +351,7 @@
       </div>
 
       <div id="aho-movs" class="aho-panel">
+        <div id="ahorroTotalCard"></div>
         <div class="balance-grid" id="ahorroGrid"></div>
         <div id="ahorroList"></div>
       </div>
@@ -615,11 +616,15 @@ function gastoShare(g, persona){
   return 0;
 }
 function calcularAhorro(persona){
-  const aportes = ahorros.filter(a=>a.quien===persona && a.tipo==='Aporte').reduce((s,a)=>s+Number(a.monto||0),0);
-  const retiros = ahorros.filter(a=>a.quien===persona && a.tipo==='Retiro').reduce((s,a)=>s+Number(a.monto||0),0);
-  return { aportes, retiros, saldoAhorro: aportes-retiros };
+  const movs = ahorros.filter(a=>a.quien===persona);
+  const aportes = movs.filter(a=>a.tipo==='Aporte').reduce((s,a)=>s+Number(a.monto||0),0);
+  const retiros = movs.filter(a=>a.tipo==='Retiro').reduce((s,a)=>s+Number(a.monto||0),0);
+  const gastosAhorro = movs.filter(a=>a.tipo==='GastoAhorro').reduce((s,a)=>s+Number(a.monto||0),0);
+  return { aportes, retiros, gastosAhorro, saldoAhorro: aportes - retiros - gastosAhorro };
 }
 // TOTAL = dinero real que hay ahora. DISPONIBLE = total - lo planificado pendiente.
+// Nota: "Gasto desde ahorro" resta de saldoAhorro pero NO se resta ni suma aqui,
+// porque ese dinero ya habia salido del disponible normal cuando se aporto al ahorro.
 function calcularSaldo(persona){
   const totalIngresos = ingresos.filter(i=>i.persona===persona).reduce((s,i)=>s+Number(i.monto||0),0);
   const totalGastos = gastos.reduce((s,g)=>s+gastoShare(g,persona),0);
@@ -751,6 +756,7 @@ function renderGastos(){
           <div class="receipt-title">${esc(g.descripcion)||"(sin descripción)"}</div>
           <div class="receipt-sub">${fmtFecha(g.fecha)} · ${esc(g.quienPaga)} ${g.categoria?('· '+esc(g.categoria)):''}</div>
           ${g.vinculoPlanId?'<span class="tag ejecutado">Desde plan</span>':''}
+          ${g.origen==='plan-parcial'?'<span class="tag">🗓️ Plan (parcial)</span>':''}
           ${(g.capa==='Personal')?'<span class="tag personal">🙋 Personal</span>':''}
           ${g.origen==='cuota'?'<span class="tag">📆 Cuota</span>':''}
           ${g.origen==='deuda'?'<span class="tag">🤝 Deuda</span>':''}
@@ -823,17 +829,18 @@ function renderPlanificacion(){
     return Number(b.monto||0) - Number(a.monto||0);
   });
 
-  const resumenHTML = ["Katerine","Oliver"].map(persona=>{
-    const pend = pendientes.filter(p=>p.persona===persona);
-    const total = pend.reduce((s,p)=>s+Number(p.monto||0),0);
-    const cardClass = persona==='Katerine' ? 'card-katerine' : 'card-oliver';
-    return `
-    <div class="balance-card ${cardClass}" style="margin-bottom:12px;">
-      <div class="name">${persona} · Presupuestado pendiente</div>
-      <div class="bc-block"><div class="big num">${q(total)}</div>
-      <div class="sub">${pend.length} plan(es) planificado(s)</div></div>
-    </div>`;
-  }).join("");
+  const resumenHTML = `<div class="balance-grid" style="margin-bottom:12px;">` +
+    ["Katerine","Oliver"].map(persona=>{
+      const pend = pendientes.filter(p=>p.persona===persona);
+      const total = pend.reduce((s,p)=>s+Number(p.monto||0),0);
+      const cardClass = persona==='Katerine' ? 'card-katerine' : 'card-oliver';
+      return `
+      <div class="balance-card ${cardClass}">
+        <div class="name">${persona} · Pendiente</div>
+        <div class="bc-block"><div class="big num">${q(total)}</div>
+        <div class="sub">${pend.length} plan(es) planificado(s)</div></div>
+      </div>`;
+    }).join("") + `</div>`;
 
   if(planes.length===0){
     list.innerHTML = resumenHTML + `<div class="empty-state"><span class="ic">🗓️</span>Aún no hay nada planificado. Toca + para agregar un plan.</div>`;
@@ -847,12 +854,12 @@ function renderPlanificacion(){
     let botones = "";
     if(p.estado==='Planificado'){
       botones = `
-        <button class="btn btn-ok btn-small" onclick="marcarPagado('${p.id}')">💰 Pagar</button>
+        <button class="btn btn-ok btn-small" onclick="abrirPagarPlan('${p.id}')">💰 Pagar</button>
         <button class="btn btn-ghost btn-small" onclick="posponerPlan('${p.id}')">⏭️ Posponer</button>
         ${veces>0?`<button class="btn btn-ghost btn-small" onclick="regresarPlan('${p.id}')">◀️ Regresar mes</button>`:''}
         <button class="btn btn-ghost btn-small" onclick="abrirRepetirPlan('${p.id}')">🔁 Repetir</button>
         <button class="btn btn-ghost btn-small" onclick="editarPlan('${p.id}')">✏️ Editar</button>
-        <button class="btn btn-danger btn-small" onclick="borrarPlan('${p.id}')">🗑️</button>`;
+        <button class="btn btn-danger btn-small" onclick="borrarPlan('${p.id}')">🗑️ Borrar</button>`;
     } else if(p.estado==='Ejecutado'){
       botones = `
         <button class="btn btn-ghost btn-small" onclick="deshacerEjecucion('${p.id}')">↩️ Deshacer</button>
@@ -939,19 +946,47 @@ function abrirRepetirPlan(id){
   document.getElementById('modalOverlay').classList.add('active');
 }
 
-function marcarPagado(id){
-  const p = planes.find(x=>x.id===id);
-  if(!p) return;
-  if(!confirm(`¿Marcar "${p.concepto}" como pagado? Se creará el gasto real por ${q(p.monto)}.`)) return;
-  db.collection('gastos').add({
-    fecha: hoyISO(), descripcion: p.concepto, monto: p.monto,
-    quienPaga: p.persona, categoria: p.categoria||"", capa:'Pareja',
-    vinculoPlanId: p.id, createdAt: firebase.firestore.FieldValue.serverTimestamp()
-  }).then(ref=>{
-    db.collection('planificacion').doc(id).update({
-      estado:'Ejecutado', fechaEjecutado: hoyISO(), gastoVinculadoId: ref.id
+function abrirPagarPlan(id){
+  const p = planes.find(x=>x.id===id); if(!p) return;
+  document.getElementById('modalTitle').textContent = "Pagar: " + p.concepto;
+  document.getElementById('modalBody').innerHTML = `
+    <p class="hint">Presupuestado: ${q(p.monto)} · ${esc(p.persona)}</p>
+    <div class="field"><label>¿Cuánto vas a pagar ahora? (Q)</label>
+      <input id="f_montoPago" type="number" step="0.01" value="${p.monto}"></div>
+    <p class="hint">Si pagas el total, el plan se marca como pagado. Si pagas menos, el plan se queda "Planificado" con la diferencia pendiente.</p>
+    <button class="btn btn-ok" onclick="confirmarPagoPlan('${id}')">Confirmar pago</button>`;
+  document.getElementById('modalOverlay').classList.add('active');
+}
+function confirmarPagoPlan(id){
+  const p = planes.find(x=>x.id===id); if(!p) return;
+  const montoPago = parseFloat(document.getElementById('f_montoPago').value);
+  if(!montoPago || montoPago<=0){ alert("Ingresa un monto válido."); return; }
+
+  const restante = Math.round((Number(p.monto) - montoPago) * 100) / 100;
+
+  if(restante <= 0.009){
+    // Pago completo: gasto real vinculado + plan pasa a Ejecutado (reversible con Deshacer)
+    db.collection('gastos').add({
+      fecha: hoyISO(), descripcion: p.concepto, monto: montoPago,
+      quienPaga: p.persona, categoria: p.categoria||"", capa:'Pareja',
+      vinculoPlanId: p.id, createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    }).then(ref=>{
+      db.collection('planificacion').doc(id).update({
+        estado:'Ejecutado', fechaEjecutado: hoyISO(), gastoVinculadoId: ref.id
+      });
     });
-  });
+  } else {
+    // Pago parcial: se crea el gasto real por ese monto y el plan reduce lo que le queda pendiente
+    db.collection('gastos').add({
+      fecha: hoyISO(), descripcion: p.concepto + ' (parcial)', monto: montoPago,
+      quienPaga: p.persona, categoria: p.categoria||"", capa:'Pareja',
+      origen:'plan-parcial', vinculoPlanId: p.id,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    }).then(()=>{
+      db.collection('planificacion').doc(id).update({ monto: restante });
+    });
+  }
+  closeModal();
 }
 function deshacerEjecucion(id){
   const p = planes.find(x=>x.id===id);
@@ -986,9 +1021,18 @@ function reactivarPlan(id){ db.collection('planificacion').doc(id).update({ esta
 
 // ================= AHORRO =================
 function renderAhorro(){
+  const {saldoAhorro: ahorroKat} = calcularAhorro('Katerine');
+  const {saldoAhorro: ahorroOli} = calcularAhorro('Oliver');
+
+  document.getElementById('ahorroTotalCard').innerHTML = `
+    <div class="balance-card" style="background:linear-gradient(135deg, var(--kat-tint), var(--oli-tint)); margin-bottom:12px;">
+      <div class="name">Total ahorrado (cuenta conjunta)</div>
+      <div class="bc-block"><div class="big num">${q(ahorroKat + ahorroOli)}</div>
+      <div class="sub">Suma de lo ahorrado por ambos</div></div>
+    </div>`;
+
   const grid = document.getElementById('ahorroGrid');
-  grid.innerHTML = ["Katerine","Oliver"].map(persona=>{
-    const {saldoAhorro} = calcularAhorro(persona);
+  grid.innerHTML = [["Katerine",ahorroKat],["Oliver",ahorroOli]].map(([persona,saldoAhorro])=>{
     const cardClass = persona==='Katerine'?'card-katerine':'card-oliver';
     return `
       <div class="balance-card ${cardClass}">
@@ -999,29 +1043,69 @@ function renderAhorro(){
 
   const list = document.getElementById('ahorroList');
   if(ahorros.length===0){
-    list.innerHTML = `<div class="empty-state"><span class="ic">🐷</span>Aún no hay movimientos de ahorro. Toca + para registrar un aporte o retiro.</div>`;
+    list.innerHTML = `<div class="empty-state"><span class="ic">🐷</span>Aún no hay movimientos de ahorro. Toca + para registrar un aporte, retiro o pago con el ahorro.</div>`;
     return;
   }
   list.innerHTML = ahorros.map(a=>{
     const meta = metas.find(m=>m.id===a.metaId);
+    const color = a.tipo==='Retiro' ? 'var(--danger)' : (a.tipo==='GastoAhorro' ? 'var(--ink)' : 'var(--ok)');
+    const signo = a.tipo==='Aporte' ? '+' : '-';
+    const etiquetaTipo = a.tipo==='GastoAhorro' ? '💸 Gasto desde ahorro' : a.tipo;
     return `
     <div class="receipt ${personaClass(a.quien)}">
       <div class="receipt-row">
         <div>
-          <div class="receipt-title">${esc(a.tipo)}${a.nota?(' · '+esc(a.nota)):''}</div>
+          <div class="receipt-title">${esc(etiquetaTipo)}${a.nota?(' · '+esc(a.nota)):''}</div>
           <div class="receipt-sub">${fmtFecha(a.fecha)} · ${esc(a.quien)}${meta?(' · Meta: '+esc(meta.nombre)):''}</div>
+          ${a.tipo==='GastoAhorro'?'<span class="tag">No afecta el disponible normal</span>':''}
         </div>
-        <div class="receipt-amount num" style="color:${a.tipo==='Retiro'?'var(--danger)':'var(--ok)'}">
-          ${a.tipo==='Aporte'?'+':'-'} ${q(a.monto)}
-        </div>
+        <div class="receipt-amount num" style="color:${color}">${signo} ${q(a.monto)}</div>
       </div>
       <div class="actions-row">
+        <button class="btn btn-ghost btn-small" onclick="editarAhorro('${a.id}')">✏️ Editar</button>
         <button class="btn btn-ghost btn-small" onclick="eliminarAhorro('${a.id}')">🗑️ Borrar</button>
       </div>
     </div>`;
   }).join("");
 }
 function eliminarAhorro(id){ if(confirm("¿Borrar este movimiento de ahorro?")) db.collection('ahorros').doc(id).delete(); }
+function editarAhorro(id){
+  const a = ahorros.find(x=>x.id===id); if(!a) return;
+  const metasActivas = metas;
+  document.getElementById('modalTitle').textContent = "Editar movimiento de ahorro";
+  document.getElementById('modalBody').innerHTML = `
+    <div class="field"><label>Tipo</label>
+      <select id="f_tipo">
+        <option value="Aporte" ${a.tipo==='Aporte'?'selected':''}>Aporte</option>
+        <option value="Retiro" ${a.tipo==='Retiro'?'selected':''}>Retiro</option>
+        <option value="GastoAhorro" ${a.tipo==='GastoAhorro'?'selected':''}>Gasto desde ahorro (pagar algo)</option>
+      </select></div>
+    <div class="field"><label>¿Quién?</label>
+      <select id="f_persona">
+        <option ${a.quien==='Katerine'?'selected':''}>Katerine</option>
+        <option ${a.quien==='Oliver'?'selected':''}>Oliver</option>
+      </select></div>
+    <div class="field"><label>Monto (Q)</label><input id="f_monto" type="number" step="0.01" value="${a.monto}"></div>
+    <div class="field"><label>Fecha</label><input id="f_fecha" type="date" value="${a.fecha}"></div>
+    <div class="field"><label>¿Vincular a una meta? (opcional)</label>
+      <select id="f_meta"><option value="">Ninguna / ahorro general</option>
+        ${metasActivas.map(m=>`<option value="${m.id}" ${a.metaId===m.id?'selected':''}>${esc(m.nombre)}</option>`).join("")}
+      </select></div>
+    <div class="field"><label>Nota</label><input id="f_nota" value="${esc(a.nota||'')}"></div>
+    <button class="btn btn-primary" onclick="guardarEdicionAhorro('${id}')">Guardar cambios</button>`;
+  document.getElementById('modalOverlay').classList.add('active');
+}
+function guardarEdicionAhorro(id){
+  const tipo = document.getElementById('f_tipo').value;
+  const quien = document.getElementById('f_persona').value;
+  const monto = parseFloat(document.getElementById('f_monto').value);
+  const fecha = document.getElementById('f_fecha').value;
+  const metaId = document.getElementById('f_meta').value || null;
+  const nota = document.getElementById('f_nota').value.trim();
+  if(!monto || !fecha){ alert("Falta el monto o la fecha."); return; }
+  db.collection('ahorros').doc(id).update({ tipo, quien, monto, fecha, metaId, nota });
+  closeModal();
+}
 
 // ================= METAS =================
 function renderMetas(){
@@ -1791,12 +1875,21 @@ function openAddModal(){
   else if(currentView==='ahorro' && currentAhoSegment==='movs'){
     title.textContent="Nuevo movimiento de ahorro";
     body.innerHTML=`
-      <div class="field"><label>Tipo</label><select id="f_tipo"><option>Aporte</option><option>Retiro</option></select></div>
+      <div class="field"><label>Tipo</label>
+        <select id="f_tipo">
+          <option value="Aporte">Aporte</option>
+          <option value="Retiro">Retiro</option>
+          <option value="GastoAhorro">Gasto desde ahorro (pagar algo)</option>
+        </select></div>
       <div class="field"><label>¿Quién?</label><select id="f_persona"><option>Katerine</option><option>Oliver</option></select></div>
       <div class="field"><label>Monto (Q)</label><input id="f_monto" type="number" step="0.01" placeholder="0.00"></div>
       <div class="field"><label>Fecha</label><input id="f_fecha" type="date" value="${hoyISO()}"></div>
+      <div class="field"><label>¿Vincular a una meta? (opcional)</label>
+        <select id="f_meta"><option value="">Ninguna / ahorro general</option>
+          ${metas.map(m=>`<option value="${m.id}">${esc(m.nombre)}</option>`).join("")}
+        </select></div>
       <div class="field"><label>Nota (opcional)</label><input id="f_nota" placeholder="Ej. Ahorro general"></div>
-      <p class="hint">Un <strong>Aporte</strong> resta del total disponible y suma a lo ahorrado. Un <strong>Retiro</strong> hace lo contrario.</p>
+      <p class="hint"><strong>Aporte</strong>: resta del disponible, suma al ahorro. <strong>Retiro</strong>: regresa dinero del ahorro al disponible. <strong>Gasto desde ahorro</strong>: pagas algo directo con el ahorro — resta del ahorro pero NO toca tu disponible normal.</p>
       <button class="btn btn-primary" onclick="guardarAhorro()">Guardar movimiento</button>`;
   }
   else if(currentView==='ahorro' && currentAhoSegment==='metas'){
@@ -1912,9 +2005,10 @@ function guardarAhorro(){
   const quien=document.getElementById('f_persona').value;
   const monto=parseFloat(document.getElementById('f_monto').value);
   const fecha=document.getElementById('f_fecha').value;
+  const metaId=document.getElementById('f_meta').value || null;
   const nota=document.getElementById('f_nota').value.trim();
   if(!monto||!fecha){ alert("Falta el monto o la fecha."); return; }
-  db.collection('ahorros').add({ tipo, quien, monto, fecha, nota, metaId:null,
+  db.collection('ahorros').add({ tipo, quien, monto, fecha, nota, metaId,
     createdAt: firebase.firestore.FieldValue.serverTimestamp() });
   closeModal();
 }
