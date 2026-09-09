@@ -328,6 +328,7 @@
           <button class="active" data-capa="Todos" onclick="switchCapaFiltro('Todos')">Todos</button>
           <button data-capa="Pareja" onclick="switchCapaFiltro('Pareja')">🏠 Pareja</button>
           <button data-capa="Personal" onclick="switchCapaFiltro('Personal')">🙋 Personal</button>
+          <button data-capa="SinCategoria" onclick="switchCapaFiltro('SinCategoria')">⚠️ Sin categoría</button>
         </div>
         <div id="gastosList"></div>
       </div>
@@ -383,6 +384,8 @@
       <div id="comp-tarjeta" class="comp-panel" style="display:none;">
         <div id="tarjetaResumen"></div>
         <div id="tarjetaList"></div>
+        <div class="section-title"><h2 style="font-size:15px;">Historial de pagos</h2></div>
+        <div id="tarjetaHistorial"></div>
       </div>
 
       <div id="comp-suscripciones" class="comp-panel" style="display:none;">
@@ -549,6 +552,7 @@ function switchCapaFiltro(capa){
 let ingresos=[], gastos=[], planes=[], ahorros=[], metas=[];
 let deudas=[], cuotasPlanes=[], cuotasPagos=[], tarjetaGastos=[], suscripciones=[];
 let reembolsos=[];
+let tarjetaPagos=[];
 let saldosIniciales = { Oliver: 0, Katerine: 0 };
 
 function startListeners(){
@@ -567,6 +571,7 @@ function startListeners(){
   col('cuotas_planes','createdAt','desc', v=>cuotasPlanes=v);
   col('cuotas_pagos','numero','asc', v=>cuotasPagos=v);
   col('tarjeta_gastos','fecha','desc', v=>tarjetaGastos=v);
+  col('tarjeta_pagos','fechaPago','desc', v=>tarjetaPagos=v);
   col('suscripciones','createdAt','desc', v=>suscripciones=v);
   col('reembolsos','fecha','desc', v=>reembolsos=v);
 
@@ -606,8 +611,9 @@ const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto"
 const CATEGORIAS = [
   "🏠 Vivienda / Hogar","🛒 Despensa / Súper","🚗 Transporte","🍔 Comida Fuera","💊 Salud y Cuidado Personal",
   "🎭 Diversión y Ocio","🛍️ Compras Personales","💳 Deudas / Cuotas","🐶 Mascotas","🎁 Regalos",
-  "💵 Gasto Libre","⚠️ Imprevistos"
+  "💵 Gasto Libre","🐷 Ahorro / Inversión","⚠️ Imprevistos"
 ];
+const CATEGORIAS_INGRESO = ["💰 Salario","🎁 Regalo recibido","🔁 Reembolso","🤝 Préstamo recibido","💵 Otro ingreso"];
 const CAT_COLORS = ['#B38D97','#564256','#3581B8','#7FB8DD','#9B4351','#8FD4C1','#7A6B7A','#C9A0AC','#264653','#E6C79C','#8AA399','#D9C6DA'];
 
 function gastoShare(g, persona){
@@ -702,7 +708,7 @@ function renderIngresos(){
       <div class="receipt-row">
         <div>
           <div class="receipt-title">${esc(i.descripcion)||"(sin descripción)"}</div>
-          <div class="receipt-sub">${fmtFecha(i.fecha)} · ${esc(i.persona)}</div>
+          <div class="receipt-sub">${fmtFecha(i.fecha)} · ${esc(i.persona)} ${i.categoria?('· '+esc(i.categoria)):''}</div>
           ${i.origen==='reembolso'?'<span class="tag">🔁 Reembolso</span>':''}
         </div>
         <div class="receipt-amount num">+ ${q(i.monto)}</div>
@@ -726,6 +732,8 @@ function editarIngreso(id){
         <option ${i.persona==='Katerine'?'selected':''}>Katerine</option>
         <option ${i.persona==='Oliver'?'selected':''}>Oliver</option>
       </select></div>
+    <div class="field"><label>Categoría</label>
+      <select id="f_cat">${CATEGORIAS_INGRESO.map(c=>`<option ${c===i.categoria?'selected':''}>${c}</option>`).join("")}</select></div>
     ${i.origen==='reembolso'?'<p class="hint">Este ingreso viene de un reembolso — mejor edítalo desde la pestaña Reembolsos para que ambos lados queden sincronizados.</p>':''}
     <button class="btn btn-primary" onclick="guardarEdicionIngreso('${id}')">Guardar cambios</button>`;
   document.getElementById('modalOverlay').classList.add('active');
@@ -735,8 +743,9 @@ function guardarEdicionIngreso(id){
   const monto=parseFloat(document.getElementById('f_monto').value);
   const fecha=document.getElementById('f_fecha').value;
   const persona=document.getElementById('f_persona').value;
+  const categoria=document.getElementById('f_cat').value;
   if(!monto||!fecha){ alert("Falta el monto o la fecha."); return; }
-  db.collection('ingresos').doc(id).update({ descripcion, monto, fecha, persona });
+  db.collection('ingresos').doc(id).update({ descripcion, monto, fecha, persona, categoria });
   closeModal();
 }
 
@@ -744,9 +753,12 @@ function guardarEdicionIngreso(id){
 function renderGastos(){
   const list = document.getElementById('gastosList');
   let f = gastos;
-  if(currentCapaFiltro!=='Todos') f = gastos.filter(g=>(g.capa||'Pareja')===currentCapaFiltro);
+  if(currentCapaFiltro==='SinCategoria') f = gastos.filter(g=>!g.categoria);
+  else if(currentCapaFiltro!=='Todos') f = gastos.filter(g=>(g.capa||'Pareja')===currentCapaFiltro);
   if(f.length===0){
-    list.innerHTML = `<div class="empty-state"><span class="ic">🧾</span>No hay gastos en esta vista todavía.</div>`;
+    list.innerHTML = currentCapaFiltro==='SinCategoria'
+      ? `<div class="empty-state"><span class="ic">✅</span>¡Ninguno! Todos tus gastos tienen categoría.</div>`
+      : `<div class="empty-state"><span class="ic">🧾</span>No hay gastos en esta vista todavía.</div>`;
     return;
   }
   list.innerHTML = f.map(g=>`
@@ -755,6 +767,7 @@ function renderGastos(){
         <div>
           <div class="receipt-title">${esc(g.descripcion)||"(sin descripción)"}</div>
           <div class="receipt-sub">${fmtFecha(g.fecha)} · ${esc(g.quienPaga)} ${g.categoria?('· '+esc(g.categoria)):''}</div>
+          ${!g.categoria?'<span class="tag" style="background:#F6E9D9; color:#8A6A3A;">⚠️ Sin categoría</span>':''}
           ${g.vinculoPlanId?'<span class="tag ejecutado">Desde plan</span>':''}
           ${g.origen==='plan-parcial'?'<span class="tag">🗓️ Plan (parcial)</span>':''}
           ${(g.capa==='Personal')?'<span class="tag personal">🙋 Personal</span>':''}
@@ -858,26 +871,26 @@ function renderPlanificacion(){
         <button class="btn btn-ghost btn-small" onclick="posponerPlan('${p.id}')">⏭️ Posponer</button>
         ${veces>0?`<button class="btn btn-ghost btn-small" onclick="regresarPlan('${p.id}')">◀️ Regresar mes</button>`:''}
         <button class="btn btn-ghost btn-small" onclick="abrirRepetirPlan('${p.id}')">🔁 Repetir</button>
-        <button class="btn btn-ghost btn-small" onclick="editarPlan('${p.id}')">✏️</button>
-        <button class="btn btn-danger btn-small" onclick="borrarPlan('${p.id}')">🗑️</button>`;
+        <button class="btn btn-ghost btn-small" onclick="editarPlan('${p.id}')">✏️ Editar</button>
+        <button class="btn btn-danger btn-small" onclick="borrarPlan('${p.id}')">🗑️ Borrar</button>`;
     } else if(p.estado==='Ejecutado'){
       botones = `
         <button class="btn btn-ghost btn-small" onclick="deshacerEjecucion('${p.id}')">↩️ Deshacer</button>
         <button class="btn btn-ghost btn-small" onclick="abrirRepetirPlan('${p.id}')">🔁 Repetir</button>
-        <button class="btn btn-ghost btn-small" onclick="editarPlan('${p.id}')">✏️</button>`;
+        <button class="btn btn-ghost btn-small" onclick="editarPlan('${p.id}')">✏️ Editar</button>`;
     } else {
       botones = `
         <button class="btn btn-ghost btn-small" onclick="reactivarPlan('${p.id}')">♻️ Reactivar</button>
         <button class="btn btn-ghost btn-small" onclick="abrirRepetirPlan('${p.id}')">🔁 Repetir</button>
-        <button class="btn btn-ghost btn-small" onclick="editarPlan('${p.id}')">✏️</button>
-        <button class="btn btn-danger btn-small" onclick="borrarPlan('${p.id}')">🗑️</button>`;
+        <button class="btn btn-ghost btn-small" onclick="editarPlan('${p.id}')">✏️ Editar</button>
+        <button class="btn btn-danger btn-small" onclick="borrarPlan('${p.id}')">🗑️ Borrar</button>`;
     }
     return `
     <div class="receipt ${personaClass(p.persona)}">
       <div class="receipt-row">
         <div>
           <div class="${tituloClass}">${esc(p.concepto)}</div>
-          <div class="receipt-sub">${esc(p.mes)} ${p.anio} · ${esc(p.persona)}</div>
+          <div class="receipt-sub">${esc(p.mes)} ${p.anio} · ${esc(p.persona)} ${p.categoria?('· '+esc(p.categoria)):''}</div>
           <span class="tag ${tagClass}">${esc(p.estado)}</span>
           ${veces>0?`<span class="tag">Pospuesto x${veces}</span>`:''}
           ${p.incluirEnSaldo===false?'<span class="tag">No incluido en saldo</span>':''}
@@ -908,6 +921,8 @@ function editarPlan(id){
         <option ${p.persona==='Katerine'?'selected':''}>Katerine</option>
         <option ${p.persona==='Oliver'?'selected':''}>Oliver</option>
       </select></div>
+    <div class="field"><label>Categoría</label>
+      <select id="f_cat">${CATEGORIAS.map(c=>`<option ${c===p.categoria?'selected':''}>${c}</option>`).join("")}</select></div>
     <div class="field-check"><input type="checkbox" id="f_incluir" ${p.incluirEnSaldo!==false?'checked':''}><label>Restar del disponible desde ya</label></div>
     ${p.estado==='Ejecutado'?'<p class="hint">Este plan ya está pagado — si cambias el monto aquí, el gasto real que ya se generó NO se actualiza solo; edítalo directo en Gastos si hace falta.</p>':''}
     <button class="btn btn-primary" onclick="guardarEdicionPlan('${id}')">Guardar cambios</button>`;
@@ -919,9 +934,10 @@ function guardarEdicionPlan(id){
   const mes=document.getElementById('f_mes').value;
   const anio=parseInt(document.getElementById('f_anio').value);
   const persona=document.getElementById('f_persona').value;
+  const categoria=document.getElementById('f_cat').value;
   const incluirEnSaldo=document.getElementById('f_incluir').checked;
   if(!concepto||!monto){ alert("Falta el concepto o el monto."); return; }
-  db.collection('planificacion').doc(id).update({ concepto, monto, mes, anio, persona, incluirEnSaldo });
+  db.collection('planificacion').doc(id).update({ concepto, monto, mes, anio, persona, categoria, incluirEnSaldo });
   closeModal();
 }
 
@@ -941,6 +957,8 @@ function abrirRepetirPlan(id){
         <option ${p.persona==='Katerine'?'selected':''}>Katerine</option>
         <option ${p.persona==='Oliver'?'selected':''}>Oliver</option>
       </select></div>
+    <div class="field"><label>Categoría</label>
+      <select id="f_cat">${CATEGORIAS.map(c=>`<option ${c===p.categoria?'selected':''}>${c}</option>`).join("")}</select></div>
     <div class="field-check"><input type="checkbox" id="f_incluir" ${p.incluirEnSaldo!==false?'checked':''}><label>Restar del disponible desde ya</label></div>
     <button class="btn btn-primary" onclick="guardarPlan()">Guardar plan</button>`;
   document.getElementById('modalOverlay').classList.add('active');
@@ -1056,7 +1074,7 @@ function renderAhorro(){
       <div class="receipt-row">
         <div>
           <div class="receipt-title">${esc(etiquetaTipo)}${a.nota?(' · '+esc(a.nota)):''}</div>
-          <div class="receipt-sub">${fmtFecha(a.fecha)} · ${esc(a.quien)}${meta?(' · Meta: '+esc(meta.nombre)):''}</div>
+          <div class="receipt-sub">${fmtFecha(a.fecha)} · ${esc(a.quien)} ${a.categoria?('· '+esc(a.categoria)):''}${meta?(' · Meta: '+esc(meta.nombre)):''}</div>
           ${a.tipo==='GastoAhorro'?'<span class="tag">No afecta el disponible normal</span>':''}
         </div>
         <div class="receipt-amount num" style="color:${color}">${signo} ${q(a.monto)}</div>
@@ -1087,6 +1105,8 @@ function editarAhorro(id){
       </select></div>
     <div class="field"><label>Monto (Q)</label><input id="f_monto" type="number" step="0.01" value="${a.monto}"></div>
     <div class="field"><label>Fecha</label><input id="f_fecha" type="date" value="${a.fecha}"></div>
+    <div class="field"><label>Categoría</label>
+      <select id="f_cat">${CATEGORIAS.map(c=>`<option ${c===(a.categoria||'🐷 Ahorro / Inversión')?'selected':''}>${c}</option>`).join("")}</select></div>
     <div class="field"><label>¿Vincular a una meta? (opcional)</label>
       <select id="f_meta"><option value="">Ninguna / ahorro general</option>
         ${metasActivas.map(m=>`<option value="${m.id}" ${a.metaId===m.id?'selected':''}>${esc(m.nombre)}</option>`).join("")}
@@ -1100,10 +1120,11 @@ function guardarEdicionAhorro(id){
   const quien = document.getElementById('f_persona').value;
   const monto = parseFloat(document.getElementById('f_monto').value);
   const fecha = document.getElementById('f_fecha').value;
+  const categoria = document.getElementById('f_cat').value;
   const metaId = document.getElementById('f_meta').value || null;
   const nota = document.getElementById('f_nota').value.trim();
   if(!monto || !fecha){ alert("Falta el monto o la fecha."); return; }
-  db.collection('ahorros').doc(id).update({ tipo, quien, monto, fecha, metaId, nota });
+  db.collection('ahorros').doc(id).update({ tipo, quien, monto, fecha, categoria, metaId, nota });
   closeModal();
 }
 
@@ -1163,7 +1184,7 @@ function guardarAporteMeta(metaId){
   const monto = parseFloat(document.getElementById('f_monto').value);
   const fecha = document.getElementById('f_fecha').value;
   if(!monto || !fecha){ alert("Falta el monto o la fecha."); return; }
-  db.collection('ahorros').add({ tipo:'Aporte', quien, monto, fecha, nota:'', metaId,
+  db.collection('ahorros').add({ tipo:'Aporte', quien, monto, fecha, categoria:'🐷 Ahorro / Inversión', nota:'', metaId,
     createdAt: firebase.firestore.FieldValue.serverTimestamp() });
   closeModal();
 }
@@ -1237,6 +1258,8 @@ function editarDeuda(id){
         <option ${d.quienDebe==='Oliver'?'selected':''}>Oliver</option>
         <option ${d.quienDebe==='50/50'?'selected':''}>50/50</option>
       </select></div>
+    <div class="field"><label>Categoría</label>
+      <select id="f_cat">${CATEGORIAS.map(c=>`<option ${c===(d.categoria||'💳 Deudas / Cuotas')?'selected':''}>${c}</option>`).join("")}</select></div>
     ${d.pagada?'<p class="hint">Esta deuda ya está pagada — si cambias el monto aquí, el gasto que ya se generó NO se actualiza solo; edítalo directo en Gastos si hace falta.</p>':''}
     <button class="btn btn-primary" onclick="guardarEdicionDeuda('${id}')">Guardar cambios</button>`;
   document.getElementById('modalOverlay').classList.add('active');
@@ -1246,8 +1269,9 @@ function guardarEdicionDeuda(id){
   const monto=parseFloat(document.getElementById('f_monto').value);
   const descripcion=document.getElementById('f_desc').value.trim();
   const quienDebe=document.getElementById('f_persona').value;
+  const categoria=document.getElementById('f_cat').value;
   if(!acreedor||!monto){ alert("Falta a quién se debe o el monto."); return; }
-  db.collection('deudas').doc(id).update({ acreedor, monto, descripcion, quienDebe });
+  db.collection('deudas').doc(id).update({ acreedor, monto, descripcion, quienDebe, categoria });
   closeModal();
 }
 function toggleDeuda(id, pagada){
@@ -1259,7 +1283,7 @@ function toggleDeuda(id, pagada){
     db.collection('gastos').add({
       fecha: hoyISO(),
       descripcion: 'Pago deuda: ' + d.acreedor + (d.descripcion ? ' - ' + d.descripcion : ''),
-      monto: d.monto, quienPaga: d.quienDebe, categoria: '💳 Deudas / Cuotas', capa:'Pareja',
+      monto: d.monto, quienPaga: d.quienDebe, categoria: d.categoria || '💳 Deudas / Cuotas', capa:'Pareja',
       origen:'deuda', deudaId: d.id,
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     }).then(ref=>{
@@ -1347,14 +1371,38 @@ function togglePagos(planId){
   document.getElementById('pagos-'+planId).classList.toggle('open');
 }
 function togglePagoCuota(pagoId, pagado){
-  db.collection('cuotas_pagos').doc(pagoId).update({
-    pagado, fechaPago: pagado ? hoyISO() : firebase.firestore.FieldValue.delete()
-  });
+  const pago = cuotasPagos.find(x=>x.id===pagoId); if(!pago) return;
+  const plan = cuotasPlanes.find(x=>x.id===pago.planId);
+
+  if(pagado){
+    db.collection('gastos').add({
+      fecha: hoyISO(), descripcion: (plan?plan.nombre:'Cuota') + ' — ' + pago.etiqueta,
+      monto: pago.monto, quienPaga: plan?plan.quienPaga:'Katerine',
+      categoria: (plan&&plan.categoria) ? plan.categoria : '💳 Deudas / Cuotas', capa:'Pareja',
+      origen:'cuota', vinculoCuotaPagoId: pagoId,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    }).then(ref=>{
+      db.collection('cuotas_pagos').doc(pagoId).update({ pagado:true, fechaPago: hoyISO(), gastoVinculadoId: ref.id });
+    });
+  } else {
+    const borrar = pago.gastoVinculadoId ? db.collection('gastos').doc(pago.gastoVinculadoId).delete().catch(()=>{}) : Promise.resolve();
+    borrar.then(()=>{
+      db.collection('cuotas_pagos').doc(pagoId).update({
+        pagado:false,
+        fechaPago: firebase.firestore.FieldValue.delete(),
+        gastoVinculadoId: firebase.firestore.FieldValue.delete()
+      });
+    });
+  }
 }
 function actualizarMontoCuota(pagoId, valor){
   const monto = parseFloat(valor);
   if(isNaN(monto)) return;
+  const pago = cuotasPagos.find(x=>x.id===pagoId);
   db.collection('cuotas_pagos').doc(pagoId).update({ monto });
+  if(pago && pago.pagado && pago.gastoVinculadoId){
+    db.collection('gastos').doc(pago.gastoVinculadoId).update({ monto });
+  }
 }
 function eliminarPlanCuotas(planId){
   if(!confirm("¿Borrar este financiamiento y todas sus cuotas?")) return;
@@ -1372,6 +1420,8 @@ function editarPlanCuotas(planId){
         <option ${p.quienPaga==='Oliver'?'selected':''}>Oliver</option>
         <option ${p.quienPaga==='50/50'?'selected':''}>50/50</option>
       </select></div>
+    <div class="field"><label>Categoría</label>
+      <select id="f_cat">${CATEGORIAS.map(c=>`<option ${c===p.categoria?'selected':''}>${c}</option>`).join("")}</select></div>
     <p class="hint">El valor total y el número de cuotas no se pueden editar aquí porque ya generaron el calendario de pagos. Si necesitas cambiar eso, mejor borra este financiamiento y créalo de nuevo.</p>
     <button class="btn btn-primary" onclick="guardarEdicionPlanCuotas('${planId}')">Guardar cambios</button>`;
   document.getElementById('modalOverlay').classList.add('active');
@@ -1379,8 +1429,9 @@ function editarPlanCuotas(planId){
 function guardarEdicionPlanCuotas(planId){
   const nombre=document.getElementById('f_nombre').value.trim();
   const quienPaga=document.getElementById('f_persona').value;
+  const categoria=document.getElementById('f_cat').value;
   if(!nombre){ alert("Falta el nombre."); return; }
-  db.collection('cuotas_planes').doc(planId).update({ nombre, quienPaga });
+  db.collection('cuotas_planes').doc(planId).update({ nombre, quienPaga, categoria });
   closeModal();
 }
 
@@ -1399,11 +1450,13 @@ function fechaPagoDe(fechaISO){
   return new Date(anio, mes, DIA_PAGO).toLocaleDateString('es-GT',{day:'2-digit',month:'short',year:'numeric'});
 }
 function renderTarjeta(){
+  const activos = tarjetaGastos.filter(g=>!g.pagado);
   const grupos = {};
-  tarjetaGastos.forEach(g=>{
+  activos.forEach(g=>{
     const p = periodoCorte(g.fecha);
-    if(!grupos[p.label]) grupos[p.label] = { total:0, items:[], pago: fechaPagoDe(g.fecha) };
+    if(!grupos[p.label]) grupos[p.label] = { total:0, totalConfirmado:0, items:[], pago: fechaPagoDe(g.fecha) };
     grupos[p.label].total += Number(g.monto||0);
+    if(!g.pendienteProceso) grupos[p.label].totalConfirmado += Number(g.monto||0);
     grupos[p.label].items.push(g);
   });
 
@@ -1419,34 +1472,70 @@ function renderTarjeta(){
     </div>`;
 
   const list = document.getElementById('tarjetaList');
-  if(tarjetaGastos.length===0){
-    list.innerHTML = `<div class="empty-state"><span class="ic">💳</span>No hay gastos de tarjeta. Toca + para agregar uno.</div>`;
+  if(activos.length===0){
+    list.innerHTML = `<div class="empty-state"><span class="ic">💳</span>No hay gastos de tarjeta activos. Toca + para agregar uno.</div>`;
+  } else {
+    list.innerHTML = Object.entries(grupos).map(([label, data])=>{
+      const hayPendientes = data.total !== data.totalConfirmado;
+      return `
+      <div class="section-title"><h2 style="font-size:15px;">${label} — ${q(data.total)}</h2></div>
+      <div class="subtle-note">Se paga aprox. el ${data.pago}${hayPendientes?` · ${q(data.totalConfirmado)} ya confirmado, resto pendiente de procesar`:''}</div>
+      <button class="btn btn-ok btn-small" style="margin-bottom:12px;" onclick="debitarPeriodoTarjeta('${label}')">💸 Debitar ${q(data.totalConfirmado)} confirmado</button>
+      ${data.items.map(g=>`
+        <div class="receipt ${personaClass(g.quien)}" style="${g.pendienteProceso?'opacity:.5;':''}">
+          <div class="receipt-row">
+            <div>
+              <div class="receipt-title">${esc(g.descripcion)||'(sin descripción)'}</div>
+              <div class="receipt-sub">${fmtFecha(g.fecha)} · ${esc(g.quien)} ${g.categoria?('· '+esc(g.categoria)):''}</div>
+              ${g.pendienteProceso?'<span class="tag pendiente">🕓 Aún no procesa en la tarjeta</span>':''}
+            </div>
+            <div class="receipt-amount num">${q(g.monto)}</div>
+          </div>
+          <div class="actions-row">
+            <button class="btn btn-ghost btn-small" onclick="togglePendienteTarjeta('${g.id}', ${!g.pendienteProceso})">
+              ${g.pendienteProceso?'✅ Ya procesó':'🕓 Aún no procesa'}</button>
+            <button class="btn btn-ghost btn-small" onclick="editarTarjetaGasto('${g.id}')">✏️ Editar</button>
+            <button class="btn btn-ghost btn-small" onclick="eliminarTarjetaGasto('${g.id}')">🗑️ Borrar</button>
+          </div>
+        </div>`).join("")}
+    `;}).join("");
+  }
+
+  const hist = document.getElementById('tarjetaHistorial');
+  if(tarjetaPagos.length===0){
+    hist.innerHTML = `<div class="empty-state"><span class="ic">📜</span>Aún no se ha debitado ningún corte.</div>`;
     return;
   }
-  list.innerHTML = Object.entries(grupos).map(([label, data])=>`
-    <div class="section-title"><h2 style="font-size:15px;">${label} — ${q(data.total)}</h2></div>
-    <div class="subtle-note">Se paga aprox. el ${data.pago}</div>
-    <button class="btn btn-ok btn-small" style="margin-bottom:12px;" onclick="debitarPeriodoTarjeta('${label}')">💸 Debitar ${q(data.total)} de este corte</button>
-    ${data.items.map(g=>`
-      <div class="receipt ${personaClass(g.quien)}">
-        <div class="receipt-row">
-          <div>
-            <div class="receipt-title">${esc(g.descripcion)||'(sin descripción)'}</div>
-            <div class="receipt-sub">${fmtFecha(g.fecha)} · ${esc(g.quien)} ${g.categoria?('· '+esc(g.categoria)):''}</div>
-          </div>
-          <div class="receipt-amount num">${q(g.monto)}</div>
+  hist.innerHTML = tarjetaPagos.map(p=>`
+    <div class="plan-card">
+      <div class="plan-head">
+        <div>
+          <div class="receipt-title">${esc(p.periodo)}</div>
+          <div class="receipt-sub">Pagado el ${fmtFecha(p.fechaPago)} · ${p.items?p.items.length:0} movimiento(s)</div>
+          <div class="receipt-sub">Katerine: ${q(p.montoKaterine)} · Oliver: ${q(p.montoOliver)}</div>
         </div>
-        <div class="actions-row">
-          <button class="btn btn-ghost btn-small" onclick="eliminarTarjetaGasto('${g.id}')">🗑️ Borrar</button>
-        </div>
-      </div>`).join("")}
-  `).join("");
+        <div class="receipt-amount num">${q(p.total)}</div>
+      </div>
+      <div class="actions-row">
+        <button class="btn btn-ghost btn-small" onclick="togglePagos('hist-${p.id}')">📋 Ver detalle</button>
+      </div>
+      <div class="pagos-list" id="pagos-hist-${p.id}">
+        ${(p.items||[]).map(it=>`
+          <div class="pago-row">
+            <div class="pago-left"><span>${esc(it.descripcion)} · ${esc(it.quien)}</span></div>
+            <span>${q(it.monto)}</span>
+          </div>`).join("")}
+      </div>
+    </div>`).join("");
+}
+function togglePendienteTarjeta(id, pendiente){
+  db.collection('tarjeta_gastos').doc(id).update({ pendienteProceso: pendiente });
 }
 function debitarPeriodoTarjeta(label){
-  const items = tarjetaGastos.filter(g => periodoCorte(g.fecha).label === label);
-  if(items.length===0) return;
+  const items = tarjetaGastos.filter(g => !g.pagado && !g.pendienteProceso && periodoCorte(g.fecha).label === label);
+  if(items.length===0){ alert("No hay movimientos confirmados en este corte todavía (puede que todos estén 'pendientes de procesar')."); return; }
   const total = items.reduce((s,g)=>s+Number(g.monto||0),0);
-  if(!confirm(`¿Debitar ${q(total)} del corte "${label}"? Esto crea el/los gasto(s) real(es) según quién pagó cada compra, y limpia estos ${items.length} movimiento(s) de la lista de tarjeta (ya quedan registrados como gasto real, no se pierden).`)) return;
+  if(!confirm(`¿Debitar ${q(total)} del corte "${label}"? Esto crea el/los gasto(s) real(es) según quién pagó cada compra, y los archiva en el historial de pagos (no se borran, quedan guardados para consulta).`)) return;
 
   const montoPorPersona = { Katerine:0, Oliver:0 };
   items.forEach(g=>{
@@ -1454,10 +1543,12 @@ function debitarPeriodoTarjeta(label){
     else if(g.quien==='Oliver') montoPorPersona.Oliver += Number(g.monto||0);
     else if(g.quien==='50/50'){ montoPorPersona.Katerine += Number(g.monto||0)/2; montoPorPersona.Oliver += Number(g.monto||0)/2; }
   });
+  montoPorPersona.Katerine = Math.round(montoPorPersona.Katerine*100)/100;
+  montoPorPersona.Oliver = Math.round(montoPorPersona.Oliver*100)/100;
 
   const batch = db.batch();
   ['Katerine','Oliver'].forEach(persona=>{
-    const monto = Math.round(montoPorPersona[persona]*100)/100;
+    const monto = montoPorPersona[persona];
     if(monto > 0){
       const ref = db.collection('gastos').doc();
       batch.set(ref, {
@@ -1469,11 +1560,47 @@ function debitarPeriodoTarjeta(label){
       });
     }
   });
-  items.forEach(g => batch.delete(db.collection('tarjeta_gastos').doc(g.id)));
+
+  const pagoRef = db.collection('tarjeta_pagos').doc();
+  batch.set(pagoRef, {
+    periodo: label, fechaPago: hoyISO(), total,
+    montoKaterine: montoPorPersona.Katerine, montoOliver: montoPorPersona.Oliver,
+    items: items.map(it=>({ descripcion: it.descripcion||'', monto: it.monto, quien: it.quien, categoria: it.categoria||'' })),
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+  items.forEach(g => batch.update(db.collection('tarjeta_gastos').doc(g.id), { pagado:true, pagoId: pagoRef.id }));
   batch.commit();
 }
 function eliminarTarjetaGasto(id){
   if(confirm("¿Borrar este gasto de tarjeta?")) db.collection('tarjeta_gastos').doc(id).delete();
+}
+function editarTarjetaGasto(id){
+  const g = tarjetaGastos.find(x=>x.id===id); if(!g) return;
+  document.getElementById('modalTitle').textContent = "Editar gasto de tarjeta";
+  document.getElementById('modalBody').innerHTML = `
+    <div class="field"><label>Descripción</label><input id="f_desc" value="${esc(g.descripcion||'')}"></div>
+    <div class="field"><label>Monto (Q)</label><input id="f_monto" type="number" step="0.01" value="${g.monto}"></div>
+    <div class="field"><label>Fecha</label><input id="f_fecha" type="date" value="${g.fecha}"></div>
+    <div class="field"><label>¿A quién se le debita?</label>
+      <select id="f_persona">
+        <option ${g.quien==='Katerine'?'selected':''}>Katerine</option>
+        <option ${g.quien==='Oliver'?'selected':''}>Oliver</option>
+        <option ${g.quien==='50/50'?'selected':''}>50/50</option>
+      </select></div>
+    <div class="field"><label>Categoría</label>
+      <select id="f_cat">${CATEGORIAS.map(c=>`<option ${c===g.categoria?'selected':''}>${c}</option>`).join("")}</select></div>
+    <button class="btn btn-primary" onclick="guardarEdicionTarjetaGasto('${id}')">Guardar cambios</button>`;
+  document.getElementById('modalOverlay').classList.add('active');
+}
+function guardarEdicionTarjetaGasto(id){
+  const descripcion=document.getElementById('f_desc').value.trim();
+  const monto=parseFloat(document.getElementById('f_monto').value);
+  const fecha=document.getElementById('f_fecha').value;
+  const quien=document.getElementById('f_persona').value;
+  const categoria=document.getElementById('f_cat').value;
+  if(!monto||!fecha){ alert("Falta el monto o la fecha."); return; }
+  db.collection('tarjeta_gastos').doc(id).update({ descripcion, monto, fecha, quien, categoria });
+  closeModal();
 }
 
 // ================= SUSCRIPCIONES =================
@@ -1614,6 +1741,7 @@ function guardarReembolso(){
   const beneficiario = pagador==='Katerine' ? 'Oliver' : 'Katerine';
   const monto = parseFloat(document.getElementById('f_monto').value);
   const fecha = document.getElementById('f_fecha').value;
+  const categoria = document.getElementById('f_cat').value;
   const motivo = document.getElementById('f_motivo').value.trim();
   if(!monto || !fecha){ alert("Falta el monto o la fecha."); return; }
 
@@ -1624,18 +1752,18 @@ function guardarReembolso(){
 
   batch.set(gastoRef, {
     fecha, descripcion: 'Cubriste a ' + beneficiario + (motivo?(': '+motivo):''),
-    monto, quienPaga: pagador, categoria: '🎁 Regalos', capa:'Pareja',
+    monto, quienPaga: pagador, categoria, capa:'Pareja',
     origen:'reembolso', reembolsoId: reembolsoRef.id,
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   });
   batch.set(ingresoRef, {
     fecha, descripcion: pagador + ' te cubrió' + (motivo?(': '+motivo):''),
-    monto, persona: beneficiario,
+    monto, persona: beneficiario, categoria: '🔁 Reembolso',
     origen:'reembolso', reembolsoId: reembolsoRef.id,
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   });
   batch.set(reembolsoRef, {
-    fecha, pagador, beneficiario, monto, motivo,
+    fecha, pagador, beneficiario, monto, categoria, motivo,
     gastoId: gastoRef.id, ingresoId: ingresoRef.id,
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   });
@@ -1658,6 +1786,8 @@ function editarReembolso(id){
     <p class="hint">${r.pagador} cubrió a ${r.beneficiario}. Si necesitas cambiar de dirección, mejor borra este y crea uno nuevo.</p>
     <div class="field"><label>Monto (Q)</label><input id="f_monto" type="number" step="0.01" value="${r.monto}"></div>
     <div class="field"><label>Fecha</label><input id="f_fecha" type="date" value="${r.fecha}"></div>
+    <div class="field"><label>Categoría</label>
+      <select id="f_cat">${CATEGORIAS.map(c=>`<option ${c===r.categoria?'selected':''}>${c}</option>`).join("")}</select></div>
     <div class="field"><label>Motivo (opcional)</label><input id="f_motivo" value="${esc(r.motivo||'')}"></div>
     <button class="btn btn-primary" onclick="guardarEdicionReembolso('${id}')">Guardar cambios</button>`;
   document.getElementById('modalOverlay').classList.add('active');
@@ -1666,13 +1796,14 @@ function guardarEdicionReembolso(id){
   const r = reembolsos.find(x=>x.id===id); if(!r) return;
   const monto = parseFloat(document.getElementById('f_monto').value);
   const fecha = document.getElementById('f_fecha').value;
+  const categoria = document.getElementById('f_cat').value;
   const motivo = document.getElementById('f_motivo').value.trim();
   if(!monto || !fecha){ alert("Falta el monto o la fecha."); return; }
 
   const batch = db.batch();
-  batch.update(db.collection('reembolsos').doc(id), { monto, fecha, motivo });
+  batch.update(db.collection('reembolsos').doc(id), { monto, fecha, categoria, motivo });
   if(r.gastoId) batch.update(db.collection('gastos').doc(r.gastoId), {
-    monto, fecha, descripcion: 'Cubriste a ' + r.beneficiario + (motivo?(': '+motivo):'')
+    monto, fecha, categoria, descripcion: 'Cubriste a ' + r.beneficiario + (motivo?(': '+motivo):'')
   });
   if(r.ingresoId) batch.update(db.collection('ingresos').doc(r.ingresoId), {
     monto, fecha, descripcion: r.pagador + ' te cubrió' + (motivo?(': '+motivo):'')
@@ -1830,6 +1961,8 @@ function openAddModal(){
       <div class="field"><label>Monto (Q)</label><input id="f_monto" type="number" step="0.01" placeholder="0.00"></div>
       <div class="field"><label>Fecha</label><input id="f_fecha" type="date" value="${hoyISO()}"></div>
       <div class="field"><label>¿Para quién?</label><select id="f_persona"><option>Katerine</option><option>Oliver</option></select></div>
+      <div class="field"><label>Categoría</label>
+        <select id="f_cat">${CATEGORIAS_INGRESO.map(c=>`<option>${c}</option>`).join("")}</select></div>
       <button class="btn btn-primary" onclick="guardarIngreso()">Guardar ingreso</button>`;
   }
   else if(currentView==='movimientos' && currentMovSegment==='gastos'){
@@ -1858,6 +1991,8 @@ function openAddModal(){
         <select id="f_mes">${MESES.map((m,i)=>`<option ${i===hoy.getMonth()?'selected':''}>${m}</option>`).join("")}</select></div>
       <div class="field"><label>Año</label><input id="f_anio" type="number" value="${hoy.getFullYear()}"></div>
       <div class="field"><label>¿Para quién?</label><select id="f_persona"><option>Katerine</option><option>Oliver</option></select></div>
+      <div class="field"><label>Categoría</label>
+        <select id="f_cat">${CATEGORIAS.map(c=>`<option>${c}</option>`).join("")}</select></div>
       <div class="field-check"><input type="checkbox" id="f_incluir" checked><label>Restar del disponible desde ya</label></div>
       <button class="btn btn-primary" onclick="guardarPlan()">Guardar plan</button>`;
   }
@@ -1868,6 +2003,8 @@ function openAddModal(){
         <select id="f_pagador"><option>Katerine</option><option>Oliver</option></select></div>
       <div class="field"><label>Monto (Q)</label><input id="f_monto" type="number" step="0.01" placeholder="0.00"></div>
       <div class="field"><label>Fecha</label><input id="f_fecha" type="date" value="${hoyISO()}"></div>
+      <div class="field"><label>Categoría</label>
+        <select id="f_cat">${CATEGORIAS.map(c=>`<option>${c}</option>`).join("")}</select></div>
       <div class="field"><label>Motivo (opcional)</label><input id="f_motivo" placeholder="Ej. Le compré su cena de ayer"></div>
       <p class="hint">Se va a registrar como <strong>gasto</strong> para quien pagó ahora, y como <strong>ingreso</strong> para el otro (porque ya no tiene que cubrir ese dinero). Funciona en cualquier dirección.</p>
       <button class="btn btn-primary" onclick="guardarReembolso()">Guardar reembolso</button>`;
@@ -1884,6 +2021,8 @@ function openAddModal(){
       <div class="field"><label>¿Quién?</label><select id="f_persona"><option>Katerine</option><option>Oliver</option></select></div>
       <div class="field"><label>Monto (Q)</label><input id="f_monto" type="number" step="0.01" placeholder="0.00"></div>
       <div class="field"><label>Fecha</label><input id="f_fecha" type="date" value="${hoyISO()}"></div>
+      <div class="field"><label>Categoría</label>
+        <select id="f_cat">${CATEGORIAS.map(c=>`<option ${c==='🐷 Ahorro / Inversión'?'selected':''}>${c}</option>`).join("")}</select></div>
       <div class="field"><label>¿Vincular a una meta? (opcional)</label>
         <select id="f_meta"><option value="">Ninguna / ahorro general</option>
           ${metas.map(m=>`<option value="${m.id}">${esc(m.nombre)}</option>`).join("")}
@@ -1908,6 +2047,8 @@ function openAddModal(){
       <div class="field"><label>Monto (Q)</label><input id="f_monto" type="number" step="0.01" placeholder="0.00"></div>
       <div class="field"><label>Descripción</label><input id="f_desc" placeholder="¿De qué es esta deuda?"></div>
       <div class="field"><label>¿Quién debe?</label><select id="f_persona"><option>Katerine</option><option>Oliver</option><option>50/50</option></select></div>
+      <div class="field"><label>Categoría</label>
+        <select id="f_cat">${CATEGORIAS.map(c=>`<option ${c==='💳 Deudas / Cuotas'?'selected':''}>${c}</option>`).join("")}</select></div>
       <p class="hint">Las deudas no tienen fecha de pago fija — solo se registran y se marcan como pagadas cuando toque.</p>
       <button class="btn btn-primary" onclick="guardarDeuda()">Guardar deuda</button>`;
   }
@@ -1923,7 +2064,9 @@ function openAddModal(){
         <select id="f_mes">${MESES.map((m,i)=>`<option ${i===hoy.getMonth()?'selected':''}>${m}</option>`).join("")}</select></div>
       <div class="field"><label>Año de inicio</label><input id="f_anio" type="number" value="${hoy.getFullYear()}"></div>
       <div class="field"><label>¿Quién paga?</label><select id="f_persona"><option>Katerine</option><option>Oliver</option><option>50/50</option></select></div>
-      <p class="hint">Las cuotas se generan solas al guardar. Después puedes editar el monto de cada una (si pagas de más para adelantar) y marcarlas como pagadas.</p>
+      <div class="field"><label>Categoría</label>
+        <select id="f_cat">${CATEGORIAS.map(c=>`<option ${c==='💳 Deudas / Cuotas'?'selected':''}>${c}</option>`).join("")}</select></div>
+      <p class="hint">Las cuotas se generan solas al guardar. Después puedes editar el monto de cada una (si pagas de más para adelantar) y marcarlas como pagadas — al marcarlas, ahora sí se crea el gasto real.</p>
       <button class="btn btn-primary" onclick="guardarPlanCuotas()">Generar cuotas</button>`;
   }
   else if(currentView==='compromisos' && currentCompSegment==='tarjeta'){
@@ -1932,7 +2075,7 @@ function openAddModal(){
       <div class="field"><label>Descripción</label><input id="f_desc" placeholder="Ej. Compra en línea..."></div>
       <div class="field"><label>Monto (Q)</label><input id="f_monto" type="number" step="0.01" placeholder="0.00"></div>
       <div class="field"><label>Fecha</label><input id="f_fecha" type="date" value="${hoyISO()}"></div>
-      <div class="field"><label>¿Quién?</label><select id="f_persona"><option>Katerine</option><option>Oliver</option><option>50/50</option></select></div>
+      <div class="field"><label>¿A quién se le debita? (no importa de quién es la tarjeta)</label><select id="f_persona"><option>Katerine</option><option>Oliver</option><option>50/50</option></select></div>
       <div class="field"><label>Categoría</label>
         <select id="f_cat">${CATEGORIAS.map(c=>`<option>${c}</option>`).join("")}</select></div>
       <p class="hint">Corte el ${DIA_CORTE} de cada mes · pago el ${DIA_PAGO} del mes siguiente. La app agrupa cada gasto en el corte que le toca.</p>
@@ -1971,8 +2114,9 @@ function guardarIngreso(){
   const monto=parseFloat(document.getElementById('f_monto').value);
   const fecha=document.getElementById('f_fecha').value;
   const persona=document.getElementById('f_persona').value;
+  const categoria=document.getElementById('f_cat').value;
   if(!monto||!fecha){ alert("Falta el monto o la fecha."); return; }
-  db.collection('ingresos').add({ descripcion, monto, fecha, persona,
+  db.collection('ingresos').add({ descripcion, monto, fecha, persona, categoria,
     createdAt: firebase.firestore.FieldValue.serverTimestamp() });
   closeModal();
 }
@@ -1994,9 +2138,10 @@ function guardarPlan(){
   const mes=document.getElementById('f_mes').value;
   const anio=parseInt(document.getElementById('f_anio').value);
   const persona=document.getElementById('f_persona').value;
+  const categoria=document.getElementById('f_cat').value;
   const incluirEnSaldo=document.getElementById('f_incluir').checked;
   if(!concepto||!monto){ alert("Falta el concepto o el monto."); return; }
-  db.collection('planificacion').add({ concepto, monto, mes, anio, persona, incluirEnSaldo,
+  db.collection('planificacion').add({ concepto, monto, mes, anio, persona, categoria, incluirEnSaldo,
     estado:'Planificado', vecesPospuesto:0, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
   closeModal();
 }
@@ -2005,10 +2150,11 @@ function guardarAhorro(){
   const quien=document.getElementById('f_persona').value;
   const monto=parseFloat(document.getElementById('f_monto').value);
   const fecha=document.getElementById('f_fecha').value;
+  const categoria=document.getElementById('f_cat').value;
   const metaId=document.getElementById('f_meta').value || null;
   const nota=document.getElementById('f_nota').value.trim();
   if(!monto||!fecha){ alert("Falta el monto o la fecha."); return; }
-  db.collection('ahorros').add({ tipo, quien, monto, fecha, nota, metaId,
+  db.collection('ahorros').add({ tipo, quien, monto, fecha, categoria, nota, metaId,
     createdAt: firebase.firestore.FieldValue.serverTimestamp() });
   closeModal();
 }
@@ -2027,8 +2173,9 @@ function guardarDeuda(){
   const monto=parseFloat(document.getElementById('f_monto').value);
   const descripcion=document.getElementById('f_desc').value.trim();
   const quienDebe=document.getElementById('f_persona').value;
+  const categoria=document.getElementById('f_cat').value;
   if(!acreedor||!monto){ alert("Falta a quién se debe o el monto."); return; }
-  db.collection('deudas').add({ acreedor, monto, descripcion, quienDebe, pagada:false,
+  db.collection('deudas').add({ acreedor, monto, descripcion, quienDebe, categoria, pagada:false,
     fechaRegistro: hoyISO(), createdAt: firebase.firestore.FieldValue.serverTimestamp() });
   closeModal();
 }
@@ -2040,13 +2187,14 @@ function guardarPlanCuotas(){
   const mesInicio=document.getElementById('f_mes').value;
   const anioInicio=parseInt(document.getElementById('f_anio').value);
   const quienPaga=document.getElementById('f_persona').value;
+  const categoria=document.getElementById('f_cat').value;
   if(!nombre||!valorTotal||!nCuotas||nCuotas<1){ alert("Falta el nombre, el valor total o el número de cuotas."); return; }
   if(nCuotas>120){ alert("Máximo 120 cuotas."); return; }
 
   const montoCuota = Math.round((valorTotal/nCuotas)*100)/100;
 
   db.collection('cuotas_planes').add({
-    nombre, valorTotal, nCuotas, frecuencia, mesInicio, anioInicio, quienPaga, montoCuota,
+    nombre, valorTotal, nCuotas, frecuencia, mesInicio, anioInicio, quienPaga, montoCuota, categoria,
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   }).then(ref=>{
     const planId = ref.id;
