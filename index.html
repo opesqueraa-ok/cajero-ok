@@ -365,23 +365,13 @@
     <!-- ============ COMPROMISOS ============ -->
     <section class="view" id="view-compromisos">
       <div class="segmented" id="compSegmented">
-        <button class="active" data-seg="deudas" onclick="switchCompSegment('deudas')">🤝 Deudas</button>
-        <button data-seg="cuotas" onclick="switchCompSegment('cuotas')">📆 Cuotas</button>
-        <button data-seg="tarjeta" onclick="switchCompSegment('tarjeta')">💳 Tarjeta</button>
+        <button class="active" data-seg="tarjeta" onclick="switchCompSegment('tarjeta')">💳 Tarjeta</button>
         <button data-seg="suscripciones" onclick="switchCompSegment('suscripciones')">🔁 Subs</button>
+        <button data-seg="cuotas" onclick="switchCompSegment('cuotas')">📆 Cuotas</button>
+        <button data-seg="deudas" onclick="switchCompSegment('deudas')">🤝 Deudas</button>
       </div>
 
-      <div id="comp-deudas" class="comp-panel">
-        <div id="deudasResumen"></div>
-        <div id="deudasList"></div>
-      </div>
-
-      <div id="comp-cuotas" class="comp-panel" style="display:none;">
-        <div id="cuotasResumen"></div>
-        <div id="cuotasList"></div>
-      </div>
-
-      <div id="comp-tarjeta" class="comp-panel" style="display:none;">
+      <div id="comp-tarjeta" class="comp-panel">
         <div id="tarjetaResumen"></div>
         <div id="tarjetaList"></div>
         <div class="section-title"><h2 style="font-size:15px;">Historial de pagos</h2></div>
@@ -391,6 +381,16 @@
       <div id="comp-suscripciones" class="comp-panel" style="display:none;">
         <div id="subsResumen"></div>
         <div id="subsList"></div>
+      </div>
+
+      <div id="comp-cuotas" class="comp-panel" style="display:none;">
+        <div id="cuotasResumen"></div>
+        <div id="cuotasList"></div>
+      </div>
+
+      <div id="comp-deudas" class="comp-panel" style="display:none;">
+        <div id="deudasResumen"></div>
+        <div id="deudasList"></div>
       </div>
     </section>
 
@@ -507,7 +507,7 @@ auth.onAuthStateChanged(user=>{
 let currentView = 'visual';
 let currentMovSegment = 'ingresos';
 let currentAhoSegment = 'movs';
-let currentCompSegment = 'deudas';
+let currentCompSegment = 'tarjeta';
 let currentCapaFiltro = 'Todos';
 
 function switchView(name){
