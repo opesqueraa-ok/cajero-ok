@@ -380,6 +380,10 @@
 
       <div id="comp-suscripciones" class="comp-panel" style="display:none;">
         <div id="subsResumen"></div>
+        <div class="segmented" id="subsOrdenSegmented">
+          <button class="active" data-orden="precio" onclick="switchSubsOrden('precio')">💰 Más cara</button>
+          <button data-orden="calendario" onclick="switchSubsOrden('calendario')">📅 Por calendario</button>
+        </div>
         <div id="subsList"></div>
       </div>
 
@@ -398,7 +402,18 @@
     <section class="view active" id="view-visual">
       <div class="section-title"><h2>Panorama</h2></div>
       <div class="balance-grid" id="visualBalance"></div>
+      <div id="visualMutuo"></div>
       <div class="fact-grid" id="factGrid"></div>
+
+      <div class="chart-card">
+        <h3>Gasto acumulado del mes</h3>
+        <div style="display:flex; align-items:center; justify-content:center; gap:14px; margin-bottom:10px;">
+          <button class="btn btn-ghost btn-small" onclick="navegarMesVisual(-1)">◀</button>
+          <span id="visualMesLabel" style="font-weight:700; min-width:130px; text-align:center;"></span>
+          <button class="btn btn-ghost btn-small" onclick="navegarMesVisual(1)">▶</button>
+        </div>
+        <canvas id="chartAcumulado"></canvas>
+      </div>
 
       <div class="chart-card">
         <h3>Gasto por categoría (mes actual · Pareja)</h3>
@@ -413,11 +428,6 @@
       <div class="chart-card">
         <h3>Ahorro acumulado en el tiempo</h3>
         <canvas id="chartAhorro"></canvas>
-      </div>
-
-      <div class="chart-card">
-        <h3>¿Qué días gastamos más?</h3>
-        <canvas id="chartDias"></canvas>
       </div>
 
       <div class="section-title"><h2>Progreso de metas</h2></div>
@@ -508,6 +518,7 @@ let currentView = 'visual';
 let currentMovSegment = 'ingresos';
 let currentAhoSegment = 'movs';
 let currentCompSegment = 'tarjeta';
+let subsOrden = 'precio';
 let currentCapaFiltro = 'Todos';
 
 function switchView(name){
@@ -540,6 +551,12 @@ function switchCompSegment(seg){
   document.querySelector('#compSegmented button[data-seg="'+seg+'"]').classList.add('active');
   document.querySelectorAll('.comp-panel').forEach(p=>p.style.display='none');
   document.getElementById('comp-'+seg).style.display='block';
+}
+function switchSubsOrden(orden){
+  subsOrden = orden;
+  document.querySelectorAll('#subsOrdenSegmented button').forEach(b=>b.classList.remove('active'));
+  document.querySelector('#subsOrdenSegmented button[data-orden="'+orden+'"]').classList.add('active');
+  renderSuscripciones();
 }
 function switchCapaFiltro(capa){
   currentCapaFiltro = capa;
@@ -795,16 +812,16 @@ function editarGasto(id){
     <div class="field"><label>Descripción</label><input id="f_desc" value="${esc(g.descripcion||'')}"></div>
     <div class="field"><label>Monto (Q)</label><input id="f_monto" type="number" step="0.01" value="${g.monto}"></div>
     <div class="field"><label>Fecha</label><input id="f_fecha" type="date" value="${g.fecha}"></div>
-    <div class="field"><label>Capa</label>
-      <select id="f_capa" onchange="toggleQuienPagaOpciones()">
-        <option value="Pareja" ${(g.capa||'Pareja')==='Pareja'?'selected':''}>🏠 Pareja (compartido)</option>
-        <option value="Personal" ${g.capa==='Personal'?'selected':''}>🙋 Personal (solo mío)</option>
-      </select></div>
     <div class="field"><label>¿Quién paga?</label>
-      <select id="f_quien">
+      <select id="f_quien" onchange="sugerirCapaSegunQuien()">
         <option ${g.quienPaga==='Katerine'?'selected':''}>Katerine</option>
         <option ${g.quienPaga==='Oliver'?'selected':''}>Oliver</option>
         ${g.capa!=='Personal'?`<option ${g.quienPaga==='50/50'?'selected':''}>50/50</option>`:''}
+      </select></div>
+    <div class="field"><label>Capa <span style="font-weight:400; text-transform:none;">(se sugiere sola, pero la puedes cambiar — ej. la Renta la paga uno solo pero es de Pareja)</span></label>
+      <select id="f_capa" onchange="toggleQuienPagaOpciones()">
+        <option value="Pareja" ${(g.capa||'Pareja')==='Pareja'?'selected':''}>🏠 Pareja (compartido)</option>
+        <option value="Personal" ${g.capa==='Personal'?'selected':''}>🙋 Personal (solo mío)</option>
       </select></div>
     <div class="field"><label>Categoría</label>
       <select id="f_cat">${CATEGORIAS.map(c=>`<option ${c===g.categoria?'selected':''}>${c}</option>`).join("")}</select></div>
@@ -1608,33 +1625,62 @@ function montoMensualSub(s){
   const m = Number(s.monto||0);
   return s.frecuencia==='Anual' ? m/12 : m;
 }
-function proximoCobro(s){
-  if(!s.activa) return "Inactiva";
+function montoMensualSubPersona(s, persona){
+  const m = montoMensualSub(s);
+  if(s.quienPaga===persona) return m;
+  if(s.quienPaga==='50/50') return m/2;
+  return 0;
+}
+function proximoCobroDate(s){
+  if(!s.activa) return null;
   const hoy = new Date();
   const dia = Number(s.diaCobro||1);
   let d = new Date(hoy.getFullYear(), hoy.getMonth(), dia);
   if(hoy.getDate() > dia) d = new Date(hoy.getFullYear(), hoy.getMonth()+1, dia);
-  return d.toLocaleDateString('es-GT',{day:'2-digit',month:'short',year:'numeric'});
+  return d;
+}
+function proximoCobro(s){
+  const d = proximoCobroDate(s);
+  return d ? d.toLocaleDateString('es-GT',{day:'2-digit',month:'short',year:'numeric'}) : "Inactiva";
 }
 function renderSuscripciones(){
   const activas = suscripciones.filter(s=>s.activa);
-  const totalMes = activas.reduce((s,x)=>s+montoMensualSub(x),0);
+  const totalMesKat = activas.reduce((s,x)=>s+montoMensualSubPersona(x,'Katerine'),0);
+  const totalMesOli = activas.reduce((s,x)=>s+montoMensualSubPersona(x,'Oliver'),0);
   document.getElementById('subsResumen').innerHTML = `
-    <div class="balance-card card-katerine" style="margin-bottom:16px;">
-      <div class="name">Gasto mensual en suscripciones</div>
-      <div class="bc-block"><div class="big num">${q(totalMes)}</div>
-      <div class="sub">${activas.length} activa(s) · anuales prorrateadas a mes</div></div>
-    </div>`;
+    <div class="balance-grid" style="margin-bottom:6px;">
+      <div class="balance-card card-katerine">
+        <div class="name">Katerine · subs/mes</div>
+        <div class="bc-block"><div class="big num">${q(totalMesKat)}</div></div>
+      </div>
+      <div class="balance-card card-oliver">
+        <div class="name">Oliver · subs/mes</div>
+        <div class="bc-block"><div class="big num">${q(totalMesOli)}</div></div>
+      </div>
+    </div>
+    <div class="subtle-note" style="margin-bottom:16px;">Total combinado: <strong>${q(totalMesKat+totalMesOli)}</strong>/mes · ${activas.length} activa(s) · anuales prorrateadas a mes</div>`;
 
   const list = document.getElementById('subsList');
   if(suscripciones.length===0){
     list.innerHTML = `<div class="empty-state"><span class="ic">🔁</span>No hay suscripciones registradas. Toca + para agregar una.</div>`;
     return;
   }
-  const ordenadas = [...suscripciones].sort((a,b)=>{
-    if(!!a.activa !== !!b.activa) return (b.activa?1:0) - (a.activa?1:0);
-    return Number(b.monto||0) - Number(a.monto||0);
-  });
+  let ordenadas;
+  if(subsOrden==='calendario'){
+    ordenadas = [...suscripciones].sort((a,b)=>{
+      if(!!a.activa !== !!b.activa) return (b.activa?1:0) - (a.activa?1:0);
+      const da = proximoCobroDate(a), db_ = proximoCobroDate(b);
+      if(!da && !db_) return 0;
+      if(!da) return 1;
+      if(!db_) return -1;
+      return da - db_;
+    });
+  } else {
+    ordenadas = [...suscripciones].sort((a,b)=>{
+      if(!!a.activa !== !!b.activa) return (b.activa?1:0) - (a.activa?1:0);
+      return Number(b.monto||0) - Number(a.monto||0);
+    });
+  }
   const hoy = new Date();
   const prefijoMes = hoy.getFullYear()+"-"+String(hoy.getMonth()+1).padStart(2,'0');
   list.innerHTML = ordenadas.map(s=>{
@@ -1812,17 +1858,50 @@ function guardarEdicionReembolso(id){
 }
 
 // ================= VISUAL =================
-let chartCategoriaInst=null, chartMensualInst=null, chartAhorroInst=null, chartDiasInst=null;
+let chartCategoriaInst=null, chartMensualInst=null, chartAhorroInst=null, chartAcumuladoInst=null;
+let visualAnio, visualMes;
+(function(){ const h=new Date(); visualAnio=h.getFullYear(); visualMes=h.getMonth(); })();
+
+function navegarMesVisual(delta){
+  visualMes += delta;
+  if(visualMes>11){ visualMes=0; visualAnio++; }
+  else if(visualMes<0){ visualMes=11; visualAnio--; }
+  renderChartAcumulado();
+}
 
 function renderVisual(){
   document.getElementById('visualBalance').innerHTML =
     tarjetaSaldoHTML('Katerine') + tarjetaSaldoHTML('Oliver');
+  document.getElementById('visualMutuo').innerHTML = tarjetaSaldoMutuoHTML();
   renderFunFacts();
+  renderChartAcumulado();
   renderChartCategoria();
   renderChartMensual();
   renderChartAhorro();
-  renderChartDias();
   renderMetasVisual();
+}
+
+function tarjetaSaldoMutuoHTML(){
+  const k = calcularSaldo('Katerine'), o = calcularSaldo('Oliver');
+  const total = k.total + o.total;
+  const disponible = k.disponible + o.disponible;
+  const porPagar = k.porPagar + o.porPagar;
+  const saldoAhorro = k.saldoAhorro + o.saldoAhorro;
+  return `
+    <div class="balance-card" style="background:linear-gradient(135deg, var(--kat-tint), var(--oli-tint)); margin-top:12px; margin-bottom:20px;">
+      <div class="name">Entre los dos</div>
+      <div class="bc-block">
+        <div class="lbl">Total que hay</div>
+        <div class="big num ${total<0?'neg':''}">${q(total)}</div>
+      </div>
+      <div class="bc-divider"></div>
+      <div class="bc-block">
+        <div class="lbl">Disponible</div>
+        <div class="mid num ${disponible<0?'neg':''}">${q(disponible)}</div>
+      </div>
+      <div class="sub">📌 Planificado: ${q(porPagar)}</div>
+      <div class="sub">🐷 Ahorrado: ${q(saldoAhorro)}</div>
+    </div>`;
 }
 
 function renderFunFacts(){
@@ -1830,20 +1909,17 @@ function renderFunFacts(){
   const prefijo = hoy.getFullYear()+"-"+String(hoy.getMonth()+1).padStart(2,'0');
   const gMes = gastos.filter(g=>(g.capa||'Pareja')==='Pareja' && g.fecha && g.fecha.startsWith(prefijo));
   const totalMes = gMes.reduce((s,g)=>s+Number(g.monto||0),0);
+  const totalMesKat = gMes.reduce((s,g)=>s+gastoShare(g,'Katerine'),0);
+  const totalMesOli = gMes.reduce((s,g)=>s+gastoShare(g,'Oliver'),0);
   const diasMes = new Date(hoy.getFullYear(), hoy.getMonth()+1, 0).getDate();
   const promDiario = totalMes/diasMes;
+  const promDiarioKat = totalMesKat/diasMes;
+  const promDiarioOli = totalMesOli/diasMes;
 
   const porCat = {};
   gMes.forEach(g=>{ const c=g.categoria||'Sin categoría'; porCat[c]=(porCat[c]||0)+Number(g.monto||0); });
   let catTop="—", catTopM=0;
   Object.entries(porCat).forEach(([c,m])=>{ if(m>catTopM){ catTopM=m; catTop=c; } });
-
-  const porDia=[0,0,0,0,0,0,0];
-  gastos.filter(g=>(g.capa||'Pareja')==='Pareja' && g.fecha).forEach(g=>{
-    porDia[new Date(g.fecha+"T00:00:00").getDay()] += Number(g.monto||0);
-  });
-  const diasN=["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
-  let dTop=0; porDia.forEach((v,i)=>{ if(v>porDia[dTop]) dTop=i; });
 
   const totIng = ingresos.reduce((s,i)=>s+Number(i.monto||0),0);
   const totAho = ahorros.filter(a=>a.tipo==='Aporte').reduce((s,a)=>s+Number(a.monto||0),0);
@@ -1853,12 +1929,56 @@ function renderFunFacts(){
     suscripciones.filter(s=>s.activa).reduce((s,x)=>s+montoMensualSub(x),0);
 
   document.getElementById('factGrid').innerHTML = `
-    <div class="fact-card"><span class="ic">📅</span><div class="val num">${q(promDiario)}</div><div class="lbl">Gasto promedio diario este mes</div></div>
+    <div class="fact-card"><span class="ic">📅</span><div class="val num">${q(promDiario)}</div><div class="lbl">Gasto promedio diario (Pareja)</div></div>
     <div class="fact-card"><span class="ic">🏆</span><div class="val">${catTop}</div><div class="lbl">Categoría con más gasto</div></div>
-    <div class="fact-card"><span class="ic">📆</span><div class="val">${diasN[dTop]}</div><div class="lbl">Día en que más se gasta</div></div>
     <div class="fact-card"><span class="ic">🐷</span><div class="val">${pctAho}%</div><div class="lbl">Del ingreso total se ha ahorrado</div></div>
     <div class="fact-card"><span class="ic">🔁</span><div class="val num">${q(compromisoMes)}</div><div class="lbl">Fijo al mes en suscripciones</div></div>
-    <div class="fact-card"><span class="ic">🧾</span><div class="val num">${gastos.length}</div><div class="lbl">Gastos registrados en total</div></div>`;
+    <div class="fact-card"><span class="ic">👩</span><div class="val num">${q(promDiarioKat)}</div><div class="lbl">Promedio diario · Katerine</div></div>
+    <div class="fact-card"><span class="ic">👨</span><div class="val num">${q(promDiarioOli)}</div><div class="lbl">Promedio diario · Oliver</div></div>`;
+}
+
+function renderChartAcumulado(){
+  document.getElementById('visualMesLabel').textContent = MESES[visualMes] + " " + visualAnio;
+
+  const diasEnMes = new Date(visualAnio, visualMes+1, 0).getDate();
+  const prefijo = visualAnio+"-"+String(visualMes+1).padStart(2,'0');
+  const gMes = gastos.filter(g=>(g.capa||'Pareja')==='Pareja' && g.fecha && g.fecha.startsWith(prefijo));
+
+  const porDiaPareja = new Array(diasEnMes+1).fill(0);
+  const porDiaKat = new Array(diasEnMes+1).fill(0);
+  const porDiaOli = new Array(diasEnMes+1).fill(0);
+  gMes.forEach(g=>{
+    const dia = parseInt(g.fecha.slice(8,10));
+    if(dia>=1 && dia<=diasEnMes){
+      porDiaPareja[dia] += Number(g.monto||0);
+      porDiaKat[dia] += gastoShare(g,'Katerine');
+      porDiaOli[dia] += gastoShare(g,'Oliver');
+    }
+  });
+
+  const labels=[], acumPareja=[], acumKat=[], acumOli=[];
+  let accP=0, accK=0, accO=0;
+  for(let d=1; d<=diasEnMes; d++){
+    accP += porDiaPareja[d]; accK += porDiaKat[d]; accO += porDiaOli[d];
+    labels.push(d);
+    acumPareja.push(Math.round(accP*100)/100);
+    acumKat.push(Math.round(accK*100)/100);
+    acumOli.push(Math.round(accO*100)/100);
+  }
+
+  if(chartAcumuladoInst) chartAcumuladoInst.destroy();
+  chartAcumuladoInst = new Chart(document.getElementById('chartAcumulado').getContext('2d'), {
+    type:'line',
+    data:{ labels, datasets:[
+      { label:'Pareja', data:acumPareja, borderColor:'#564256', backgroundColor:'rgba(86,66,86,.10)', fill:true, tension:.2 },
+      { label:'Katerine', data:acumKat, borderColor:'#B38D97', backgroundColor:'transparent', fill:false, tension:.2 },
+      { label:'Oliver', data:acumOli, borderColor:'#3581B8', backgroundColor:'transparent', fill:false, tension:.2 }
+    ]},
+    options:{
+      plugins:{ legend:{ labels:{ font:{family:'Quicksand'} } } },
+      scales:{ x:{ title:{ display:true, text:'Día del mes' } }, y:{ beginAtZero:true } }
+    }
+  });
 }
 
 function renderChartCategoria(){
@@ -1909,21 +2029,6 @@ function renderChartAhorro(){
   });
 }
 
-function renderChartDias(){
-  const porDia=[0,0,0,0,0,0,0];
-  gastos.filter(g=>(g.capa||'Pareja')==='Pareja' && g.fecha).forEach(g=>{
-    porDia[new Date(g.fecha+"T00:00:00").getDay()] += Number(g.monto||0);
-  });
-  const orden=[1,2,3,4,5,6,0];
-  const labels=["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
-  const data=orden.map(i=>porDia[i]);
-  if(chartDiasInst) chartDiasInst.destroy();
-  chartDiasInst = new Chart(document.getElementById('chartDias').getContext('2d'), {
-    type:'bar',
-    data:{ labels, datasets:[{ label:'Gasto total', data, backgroundColor:'#8FD4C1', borderRadius:6 }] },
-    options:{ plugins:{ legend:{display:false} }, scales:{ y:{ beginAtZero:true } } }
-  });
-}
 
 function renderMetasVisual(){
   const list=document.getElementById('metasVisualList');
@@ -1971,13 +2076,13 @@ function openAddModal(){
       <div class="field"><label>Descripción</label><input id="f_desc" placeholder="Ej. Súper, Gasolina..."></div>
       <div class="field"><label>Monto (Q)</label><input id="f_monto" type="number" step="0.01" placeholder="0.00"></div>
       <div class="field"><label>Fecha</label><input id="f_fecha" type="date" value="${hoyISO()}"></div>
-      <div class="field"><label>Capa</label>
+      <div class="field"><label>¿Quién paga?</label>
+        <select id="f_quien" onchange="sugerirCapaSegunQuien()"><option>Katerine</option><option>Oliver</option><option>50/50</option></select></div>
+      <div class="field"><label>Capa <span style="font-weight:400; text-transform:none;">(se sugiere sola, pero la puedes cambiar — ej. la Renta la paga uno solo pero es de Pareja)</span></label>
         <select id="f_capa" onchange="toggleQuienPagaOpciones()">
           <option value="Pareja">🏠 Pareja (compartido)</option>
           <option value="Personal">🙋 Personal (solo mío)</option>
         </select></div>
-      <div class="field"><label>¿Quién paga?</label>
-        <select id="f_quien"><option>Katerine</option><option>Oliver</option><option>50/50</option></select></div>
       <div class="field"><label>Categoría</label>
         <select id="f_cat">${CATEGORIAS.map(c=>`<option>${c}</option>`).join("")}</select></div>
       <button class="btn btn-primary" onclick="guardarGasto()">Guardar gasto</button>`;
@@ -2103,9 +2208,17 @@ function closeModal(){ document.getElementById('modalOverlay').classList.remove(
 function toggleQuienPagaOpciones(){
   const capa=document.getElementById('f_capa').value;
   const sel=document.getElementById('f_quien');
+  const actual = sel.value;
   sel.innerHTML = capa==='Personal'
     ? `<option>Katerine</option><option>Oliver</option>`
     : `<option>Katerine</option><option>Oliver</option><option>50/50</option>`;
+  if([...sel.options].some(o=>o.value===actual)) sel.value = actual;
+}
+function sugerirCapaSegunQuien(){
+  const quien=document.getElementById('f_quien').value;
+  const capaSel=document.getElementById('f_capa');
+  if(!capaSel) return;
+  capaSel.value = (quien==='50/50') ? 'Pareja' : 'Personal';
 }
 
 // ================= GUARDAR =================
