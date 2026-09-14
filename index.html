@@ -12,7 +12,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg: #EBEBEB;
+    --bg: #F5F5F5;
     --ink: #564256;
     --ink-soft: #7A6B7A;
     --card: #FFFFFF;
@@ -58,9 +58,11 @@
   .field{ margin-bottom:16px; }
   .field label{ display:block; font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); margin-bottom:6px; font-weight:600; }
   .field input, .field select, .field textarea{
-    width:100%; padding:12px 14px; border:1.5px solid var(--line); border-radius:12px;
-    font-family:'Quicksand',sans-serif; font-size:15px; font-weight:500; background:#fff; color:var(--ink);
+    width:100%; max-width:100%; min-width:0; padding:12px 14px; border:1.5px solid var(--line); border-radius:12px;
+    font-family:'Quicksand',sans-serif; font-size:16px; font-weight:500; background:#fff; color:var(--ink);
+    box-sizing:border-box; -webkit-appearance:none; appearance:none;
   }
+  .field input[type="date"]{ width:100%; max-width:100%; }
   .field input:focus, .field select:focus, .field textarea:focus{ outline:none; border-color:var(--ink); }
   .field-check{ display:flex; align-items:center; gap:8px; font-size:14px; font-weight:600; color:var(--ink); margin-bottom:16px; }
   .field-check input{ width:auto; }
@@ -141,8 +143,8 @@
     box-shadow: var(--shadow-md);
     transition: transform 150ms ease-out, box-shadow 150ms ease-out;
   }
-  .balance-card.card-katerine{ background:var(--kat-tint); }
-  .balance-card.card-oliver{ background:var(--oli-tint); }
+  .balance-card.card-katerine{ background:linear-gradient(135deg, #FAF3F5 0%, #EAD5DC 100%); }
+  .balance-card.card-oliver{ background:linear-gradient(135deg, #EAF7FB 0%, #D6EFE9 100%); }
   .balance-card::before{ content:""; position:absolute; top:0; left:0; right:0; height:5px; }
   .balance-card.card-katerine::before{ background:var(--kat-primary); }
   .balance-card.card-oliver::before{ background:var(--oli-primary); }
@@ -268,7 +270,8 @@
   .pago-left{ display:flex; align-items:center; gap:8px; }
   .pago-monto-input{
     width:92px; padding:6px 8px; border:1.5px solid var(--line); border-radius:8px;
-    font-family:'Quicksand',sans-serif; font-weight:600; font-size:13px; text-align:right;
+    font-family:'Quicksand',sans-serif; font-weight:600; font-size:16px; text-align:right;
+    box-sizing:border-box; -webkit-appearance:none; appearance:none;
   }
 </style>
 </head>
@@ -1504,10 +1507,7 @@ function renderTarjeta(){
   }).join("");
 
   document.getElementById('tarjetaResumen').innerHTML = `
-    <div class="balance-grid" style="margin-bottom:12px;">${libreGrid}</div>
-    <div class="subtle-note" style="margin-bottom:16px;">
-      "Después de tarjeta" no resta lo que ya está vinculado a un plan (eso ya se restó como planificado).
-    </div>
+    <div class="balance-grid" style="margin-bottom:16px;">${libreGrid}</div>
     <div class="balance-card card-oliver" style="margin-bottom:16px;">
       <div class="name">Corte actual · ${pActual.label}</div>
       <div class="bc-block"><div class="big num">${q(totalActual)}</div>
