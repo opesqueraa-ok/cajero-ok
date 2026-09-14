@@ -146,8 +146,6 @@
   .balance-card.card-katerine{ background:linear-gradient(135deg, #FAF3F5 0%, #EAD5DC 100%); }
   .balance-card.card-oliver{ background:linear-gradient(135deg, #EAF7FB 0%, #D6EFE9 100%); }
   .balance-card::before{ content:""; position:absolute; top:0; left:0; right:0; height:5px; }
-  .balance-card.card-katerine::before{ background:var(--kat-primary); }
-  .balance-card.card-oliver::before{ background:var(--oli-primary); }
   .balance-card .name{ font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); margin-bottom:8px; font-weight:700; }
   .bc-block{ margin-bottom:10px; }
   .bc-block .lbl{ font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); font-weight:700; }
@@ -172,9 +170,9 @@
   .receipt::before{
     content:""; position:absolute; left:0; top:8px; bottom:8px; width:4px; border-radius:4px; background:var(--ink-soft);
   }
-  .receipt.persona-katerine::before{ background:var(--kat-primary); }
-  .receipt.persona-oliver::before{ background:var(--oli-primary); }
-  .receipt.persona-5050::before{ background:linear-gradient(180deg, var(--kat-primary) 0 50%, var(--oli-primary) 50% 100%); }
+  .receipt.persona-katerine::before{ background:linear-gradient(180deg, var(--kat-primary), var(--kat-dark)); }
+  .receipt.persona-oliver::before{ background:linear-gradient(180deg, var(--oli-primary), var(--oli-light)); }
+  .receipt.persona-5050::before{ background:linear-gradient(180deg, var(--kat-primary) 0%, var(--oli-primary) 100%); }
   .receipt-row{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
   .receipt-title{ font-weight:700; font-size:15px; }
   .receipt-sub{ font-size:12.5px; color:var(--ink-soft); margin-top:2px; font-weight:600; }
@@ -333,6 +331,7 @@
           <button data-capa="Personal" onclick="switchCapaFiltro('Personal')">🙋 Personal</button>
           <button data-capa="SinCategoria" onclick="switchCapaFiltro('SinCategoria')">⚠️ Sin categoría</button>
         </div>
+        <div id="filtroCategoriaBanner"></div>
         <div id="gastosList"></div>
       </div>
 
@@ -415,21 +414,42 @@
           <span id="visualMesLabel" style="font-weight:700; min-width:130px; text-align:center;"></span>
           <button class="btn btn-ghost btn-small" onclick="navegarMesVisual(1)">▶</button>
         </div>
+        <div class="segmented" id="segAcumulado">
+          <button class="active" data-p="Pareja" onclick="setFiltroPersonaChart('acumulado','Pareja')">🤝 Pareja</button>
+          <button data-p="Katerine" onclick="setFiltroPersonaChart('acumulado','Katerine')">👩 Katerine</button>
+          <button data-p="Oliver" onclick="setFiltroPersonaChart('acumulado','Oliver')">👨 Oliver</button>
+        </div>
         <canvas id="chartAcumulado"></canvas>
       </div>
 
       <div class="chart-card">
-        <h3>Gasto por categoría (mes actual · Pareja)</h3>
+        <h3>Gasto por categoría (mes actual)</h3>
+        <div class="subtle-note">Toca una porción para ver esos gastos en detalle.</div>
+        <div class="segmented" id="segCategoria">
+          <button class="active" data-p="Pareja" onclick="setFiltroPersonaChart('categoria','Pareja')">🤝 Pareja</button>
+          <button data-p="Katerine" onclick="setFiltroPersonaChart('categoria','Katerine')">👩 Katerine</button>
+          <button data-p="Oliver" onclick="setFiltroPersonaChart('categoria','Oliver')">👨 Oliver</button>
+        </div>
         <canvas id="chartCategoria"></canvas>
       </div>
 
       <div class="chart-card">
         <h3>Ingresos vs. Gastos (últimos 6 meses)</h3>
+        <div class="segmented" id="segMensual">
+          <button class="active" data-p="Pareja" onclick="setFiltroPersonaChart('mensual','Pareja')">🤝 Pareja</button>
+          <button data-p="Katerine" onclick="setFiltroPersonaChart('mensual','Katerine')">👩 Katerine</button>
+          <button data-p="Oliver" onclick="setFiltroPersonaChart('mensual','Oliver')">👨 Oliver</button>
+        </div>
         <canvas id="chartMensual"></canvas>
       </div>
 
       <div class="chart-card">
         <h3>Ahorro acumulado en el tiempo</h3>
+        <div class="segmented" id="segAhorro">
+          <button class="active" data-p="Pareja" onclick="setFiltroPersonaChart('ahorro','Pareja')">🤝 Pareja</button>
+          <button data-p="Katerine" onclick="setFiltroPersonaChart('ahorro','Katerine')">👩 Katerine</button>
+          <button data-p="Oliver" onclick="setFiltroPersonaChart('ahorro','Oliver')">👨 Oliver</button>
+        </div>
         <canvas id="chartAhorro"></canvas>
       </div>
 
@@ -523,6 +543,7 @@ let currentAhoSegment = 'movs';
 let currentCompSegment = 'tarjeta';
 let subsOrden = 'precio';
 let currentCapaFiltro = 'Todos';
+let filtroCategoriaGasto = null;
 
 function switchView(name){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
@@ -565,6 +586,16 @@ function switchCapaFiltro(capa){
   currentCapaFiltro = capa;
   document.querySelectorAll('#capaSegmented button').forEach(b=>b.classList.remove('active'));
   document.querySelector('#capaSegmented button[data-capa="'+capa+'"]').classList.add('active');
+  renderGastos();
+}
+function irAGastosPorCategoria(categoria){
+  filtroCategoriaGasto = categoria;
+  switchView('movimientos');
+  switchMovSegment('gastos');
+  renderGastos();
+}
+function quitarFiltroCategoriaGasto(){
+  filtroCategoriaGasto = null;
   renderGastos();
 }
 
@@ -772,9 +803,17 @@ function guardarEdicionIngreso(id){
 // ================= GASTOS =================
 function renderGastos(){
   const list = document.getElementById('gastosList');
+  const banner = document.getElementById('filtroCategoriaBanner');
+  banner.innerHTML = filtroCategoriaGasto
+    ? `<div class="subtle-note">Filtrando por: <strong>${esc(filtroCategoriaGasto)}</strong>
+        <button class="btn btn-ghost btn-small" style="margin-left:8px;" onclick="quitarFiltroCategoriaGasto()">✕ Quitar filtro</button></div>`
+    : '';
+
   let f = gastos;
   if(currentCapaFiltro==='SinCategoria') f = gastos.filter(g=>!g.categoria);
   else if(currentCapaFiltro!=='Todos') f = gastos.filter(g=>(g.capa||'Pareja')===currentCapaFiltro);
+  if(filtroCategoriaGasto) f = f.filter(g=>g.categoria===filtroCategoriaGasto);
+
   if(f.length===0){
     list.innerHTML = currentCapaFiltro==='SinCategoria'
       ? `<div class="empty-state"><span class="ic">✅</span>¡Ninguno! Todos tus gastos tienen categoría.</div>`
@@ -1964,42 +2003,53 @@ function renderFunFacts(){
     <div class="fact-card"><span class="ic">👨</span><div class="val num">${q(promDiarioOli)}</div><div class="lbl">Promedio diario · Oliver</div></div>`;
 }
 
+// Filtros de persona por grafico (independientes entre si)
+let filtroChart = { acumulado:'Pareja', categoria:'Pareja', mensual:'Pareja', ahorro:'Pareja' };
+function setFiltroPersonaChart(chart, persona){
+  filtroChart[chart] = persona;
+  const segId = { acumulado:'segAcumulado', categoria:'segCategoria', mensual:'segMensual', ahorro:'segAhorro' }[chart];
+  document.querySelectorAll('#'+segId+' button').forEach(b=>b.classList.remove('active'));
+  document.querySelector('#'+segId+' button[data-p="'+persona+'"]').classList.add('active');
+  ({ acumulado:renderChartAcumulado, categoria:renderChartCategoria, mensual:renderChartMensual, ahorro:renderChartAhorro })[chart]();
+}
+// Gasto total de una persona: su parte de lo compartido + todo lo Personal suyo
+function gastoTotalPersona(g, persona){
+  if((g.capa||'Pareja')==='Personal') return g.quienPaga===persona ? Number(g.monto||0) : 0;
+  return gastoShare(g, persona);
+}
+
 function renderChartAcumulado(){
   document.getElementById('visualMesLabel').textContent = MESES[visualMes] + " " + visualAnio;
+  const persona = filtroChart.acumulado;
 
   const diasEnMes = new Date(visualAnio, visualMes+1, 0).getDate();
   const prefijo = visualAnio+"-"+String(visualMes+1).padStart(2,'0');
-  const gMes = gastos.filter(g=>(g.capa||'Pareja')==='Pareja' && g.fecha && g.fecha.startsWith(prefijo));
+  const gMes = persona==='Pareja'
+    ? gastos.filter(g=>(g.capa||'Pareja')==='Pareja' && g.fecha && g.fecha.startsWith(prefijo))
+    : gastos.filter(g=>g.fecha && g.fecha.startsWith(prefijo));
 
-  const porDiaPareja = new Array(diasEnMes+1).fill(0);
-  const porDiaKat = new Array(diasEnMes+1).fill(0);
-  const porDiaOli = new Array(diasEnMes+1).fill(0);
+  const porDia = new Array(diasEnMes+1).fill(0);
   gMes.forEach(g=>{
     const dia = parseInt(g.fecha.slice(8,10));
     if(dia>=1 && dia<=diasEnMes){
-      porDiaPareja[dia] += Number(g.monto||0);
-      porDiaKat[dia] += gastoShare(g,'Katerine');
-      porDiaOli[dia] += gastoShare(g,'Oliver');
+      porDia[dia] += persona==='Pareja' ? Number(g.monto||0) : gastoTotalPersona(g, persona);
     }
   });
 
-  const labels=[], acumPareja=[], acumKat=[], acumOli=[];
-  let accP=0, accK=0, accO=0;
+  const labels=[], acumulado=[];
+  let acc=0;
   for(let d=1; d<=diasEnMes; d++){
-    accP += porDiaPareja[d]; accK += porDiaKat[d]; accO += porDiaOli[d];
+    acc += porDia[d];
     labels.push(d);
-    acumPareja.push(Math.round(accP*100)/100);
-    acumKat.push(Math.round(accK*100)/100);
-    acumOli.push(Math.round(accO*100)/100);
+    acumulado.push(Math.round(acc*100)/100);
   }
+  const color = persona==='Katerine' ? '#B38D97' : persona==='Oliver' ? '#3581B8' : '#564256';
 
   if(chartAcumuladoInst) chartAcumuladoInst.destroy();
   chartAcumuladoInst = new Chart(document.getElementById('chartAcumulado').getContext('2d'), {
     type:'line',
     data:{ labels, datasets:[
-      { label:'Pareja', data:acumPareja, borderColor:'#564256', backgroundColor:'rgba(86,66,86,.10)', fill:true, tension:.2 },
-      { label:'Katerine', data:acumKat, borderColor:'#B38D97', backgroundColor:'transparent', fill:false, tension:.2 },
-      { label:'Oliver', data:acumOli, borderColor:'#3581B8', backgroundColor:'transparent', fill:false, tension:.2 }
+      { label:persona, data:acumulado, borderColor:color, backgroundColor:color+'22', fill:true, tension:.2 }
     ]},
     options:{
       plugins:{ legend:{ labels:{ font:{family:'Quicksand'} } } },
@@ -2009,30 +2059,58 @@ function renderChartAcumulado(){
 }
 
 function renderChartCategoria(){
+  const persona = filtroChart.categoria;
   const hoy=new Date();
   const prefijo = hoy.getFullYear()+"-"+String(hoy.getMonth()+1).padStart(2,'0');
-  const gMes = gastos.filter(g=>(g.capa||'Pareja')==='Pareja' && g.fecha && g.fecha.startsWith(prefijo));
+  const gMes = persona==='Pareja'
+    ? gastos.filter(g=>(g.capa||'Pareja')==='Pareja' && g.fecha && g.fecha.startsWith(prefijo))
+    : gastos.filter(g=>g.fecha && g.fecha.startsWith(prefijo));
+
   const porCat={};
-  gMes.forEach(g=>{ const c=g.categoria||'Sin categoría'; porCat[c]=(porCat[c]||0)+Number(g.monto||0); });
+  gMes.forEach(g=>{
+    const monto = persona==='Pareja' ? Number(g.monto||0) : gastoTotalPersona(g, persona);
+    if(monto<=0) return;
+    const c=g.categoria||'Sin categoría';
+    porCat[c]=(porCat[c]||0)+monto;
+  });
   const labels=Object.keys(porCat), data=Object.values(porCat);
   if(chartCategoriaInst) chartCategoriaInst.destroy();
   if(labels.length===0) return;
   chartCategoriaInst = new Chart(document.getElementById('chartCategoria').getContext('2d'), {
     type:'doughnut',
     data:{ labels, datasets:[{ data, backgroundColor: labels.map((_,i)=>CAT_COLORS[i%CAT_COLORS.length]), borderWidth:0 }] },
-    options:{ plugins:{ legend:{ position:'bottom', labels:{ font:{family:'Quicksand'}, boxWidth:12 } } } }
+    options:{
+      plugins:{ legend:{ position:'bottom', labels:{ font:{family:'Quicksand'}, boxWidth:12 } } },
+      onClick: (evt, elements) => {
+        if(elements.length){
+          const idx = elements[0].index;
+          irAGastosPorCategoria(labels[idx]);
+        }
+      }
+    }
   });
 }
 
 function renderChartMensual(){
+  const persona = filtroChart.mensual;
   const hoy=new Date(); const meses=[];
   for(let i=5;i>=0;i--){
     const d=new Date(hoy.getFullYear(), hoy.getMonth()-i, 1);
     meses.push({ label: MESES[d.getMonth()].slice(0,3)+" "+String(d.getFullYear()).slice(2),
                  prefijo: d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,'0') });
   }
-  const ing = meses.map(m=> ingresos.filter(i=>i.fecha&&i.fecha.startsWith(m.prefijo)).reduce((s,i)=>s+Number(i.monto||0),0));
-  const gas = meses.map(m=> gastos.filter(g=>(g.capa||'Pareja')==='Pareja'&&g.fecha&&g.fecha.startsWith(m.prefijo)).reduce((s,g)=>s+Number(g.monto||0),0));
+  const ing = meses.map(m=>{
+    const delMes = ingresos.filter(i=>i.fecha&&i.fecha.startsWith(m.prefijo));
+    return persona==='Pareja'
+      ? delMes.reduce((s,i)=>s+Number(i.monto||0),0)
+      : delMes.filter(i=>i.persona===persona).reduce((s,i)=>s+Number(i.monto||0),0);
+  });
+  const gas = meses.map(m=>{
+    const delMes = gastos.filter(g=>g.fecha&&g.fecha.startsWith(m.prefijo));
+    return persona==='Pareja'
+      ? delMes.filter(g=>(g.capa||'Pareja')==='Pareja').reduce((s,g)=>s+Number(g.monto||0),0)
+      : delMes.reduce((s,g)=>s+gastoTotalPersona(g,persona),0);
+  });
   if(chartMensualInst) chartMensualInst.destroy();
   chartMensualInst = new Chart(document.getElementById('chartMensual').getContext('2d'), {
     type:'bar',
@@ -2044,14 +2122,20 @@ function renderChartMensual(){
 }
 
 function renderChartAhorro(){
-  const ord=[...ahorros].sort((a,b)=>(a.fecha>b.fecha?1:-1));
+  const persona = filtroChart.ahorro;
+  const movs = persona==='Pareja' ? ahorros : ahorros.filter(a=>a.quien===persona);
+  const ord=[...movs].sort((a,b)=>(a.fecha>b.fecha?1:-1));
   let acc=0; const labels=[], data=[];
-  ord.forEach(a=>{ acc += (a.tipo==='Aporte'?Number(a.monto||0):-Number(a.monto||0)); labels.push(fmtFecha(a.fecha)); data.push(acc); });
+  ord.forEach(a=>{
+    const efecto = a.tipo==='Aporte' ? Number(a.monto||0) : -Number(a.monto||0);
+    acc += efecto; labels.push(fmtFecha(a.fecha)); data.push(Math.round(acc*100)/100);
+  });
+  const color = persona==='Katerine' ? '#B38D97' : persona==='Oliver' ? '#3581B8' : '#564256';
   if(chartAhorroInst) chartAhorroInst.destroy();
   chartAhorroInst = new Chart(document.getElementById('chartAhorro').getContext('2d'), {
     type:'line',
-    data:{ labels, datasets:[{ label:'Ahorro acumulado', data, borderColor:'#564256',
-      backgroundColor:'rgba(86,66,86,.12)', fill:true, tension:.25 }] },
+    data:{ labels, datasets:[{ label:'Ahorro acumulado · '+persona, data, borderColor:color,
+      backgroundColor:color+'22', fill:true, tension:.25 }] },
     options:{ plugins:{ legend:{display:false} }, scales:{ y:{ beginAtZero:true } } }
   });
 }
