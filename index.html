@@ -326,12 +326,11 @@
 
       <div id="mov-gastos" class="mov-panel" style="display:none;">
         <div class="field" style="margin-bottom:10px;">
-          <input id="gastoBuscar" type="text" placeholder="🔍 Buscar por nombre o monto exacto (ej. 407.87)" oninput="renderGastos()">
+          <input id="gastoBuscar" type="text" placeholder="🔍 Buscar por nombre o monto (ej. 182)" oninput="renderGastos()">
         </div>
         <div class="field" style="margin-bottom:10px;">
           <select id="gastoCategoriaFiltro" onchange="filtroCategoriaGasto = this.value || null; renderGastos();">
             <option value="">Todas las categorías</option>
-            ${CATEGORIAS.map(c=>`<option value="${c}">${c}</option>`).join("")}
           </select>
         </div>
         <div class="segmented" id="capaSegmented">
@@ -530,6 +529,9 @@ function doLogout(){ auth.signOut(); }
 function entrarAlApp(){
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('appShell').style.display = 'block';
+  document.getElementById('gastoCategoriaFiltro').innerHTML =
+    `<option value="">Todas las categorías</option>` +
+    CATEGORIAS.map(c=>`<option value="${c}">${c}</option>`).join("");
   switchView('visual');
   startListeners();
 }
@@ -831,8 +833,7 @@ function renderGastos(){
   if(termino){
     const esMonto = /^\d+(\.\d+)?$/.test(termino);
     if(esMonto){
-      const buscado = parseFloat(termino);
-      f = f.filter(g=>Math.abs(Number(g.monto||0) - buscado) < 0.005);
+      f = f.filter(g=>Number(g.monto||0).toFixed(2).includes(termino));
     } else {
       const t = termino.toLowerCase();
       f = f.filter(g=>(g.descripcion||'').toLowerCase().includes(t));
