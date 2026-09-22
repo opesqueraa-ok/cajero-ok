@@ -303,16 +303,6 @@
   </header>
 
   <main>
-    <!-- ============ RESUMEN ============ -->
-    <section class="view" id="view-resumen">
-      <div class="balance-grid" id="balanceGrid"></div>
-      <div class="subtle-note">
-        <strong>Total</strong> = el dinero que realmente hay. <strong>Disponible</strong> = lo que queda libre después de restar lo planificado.
-      </div>
-      <div class="section-title"><h2>Actividad reciente</h2></div>
-      <div id="recentList"></div>
-    </section>
-
     <!-- ============ MOVIMIENTOS ============ -->
     <section class="view" id="view-movimientos">
       <div class="segmented" id="movSegmented">
@@ -338,6 +328,11 @@
           <button data-capa="Pareja" onclick="switchCapaFiltro('Pareja')">🏠 Pareja</button>
           <button data-capa="Personal" onclick="switchCapaFiltro('Personal')">🙋 Personal</button>
           <button data-capa="SinCategoria" onclick="switchCapaFiltro('SinCategoria')">⚠️ Sin categoría</button>
+        </div>
+        <div class="segmented" id="personaGastoSegmented">
+          <button class="active" data-p="Todos" onclick="switchPersonaGastoFiltro('Todos')">🤝 Todos</button>
+          <button data-p="Katerine" onclick="switchPersonaGastoFiltro('Katerine')">👩 Katerine</button>
+          <button data-p="Oliver" onclick="switchPersonaGastoFiltro('Oliver')">👨 Oliver</button>
         </div>
         <div id="filtroCategoriaBanner"></div>
         <div id="gastosList"></div>
@@ -414,6 +409,12 @@
       <div class="balance-grid" id="visualBalance"></div>
       <div id="visualMutuo"></div>
       <div class="fact-grid" id="factGrid"></div>
+      <div class="fact-grid" id="factGridComparativo" style="margin-top:-4px;"></div>
+
+      <div class="chart-card">
+        <h3>Top 3 gastos más grandes del mes</h3>
+        <div id="top3Gastos"></div>
+      </div>
 
       <div class="chart-card">
         <h3>Gasto acumulado del mes</h3>
@@ -470,7 +471,6 @@
 
   <nav class="bottomnav">
     <button class="active" data-view="visual" onclick="switchView('visual')"><span class="ic">📈</span>Visual</button>
-    <button data-view="resumen" onclick="switchView('resumen')"><span class="ic">📊</span>Resumen</button>
     <button data-view="movimientos" onclick="switchView('movimientos')"><span class="ic">🧾</span>Movim.</button>
     <button data-view="compromisos" onclick="switchView('compromisos')"><span class="ic">📌</span>Pagos</button>
     <button data-view="ahorro" onclick="switchView('ahorro')"><span class="ic">🐷</span>Ahorro</button>
@@ -554,6 +554,7 @@ let currentAhoSegment = 'movs';
 let currentCompSegment = 'tarjeta';
 let subsOrden = 'precio';
 let currentCapaFiltro = 'Todos';
+let personaGastoFiltro = 'Todos';
 let filtroCategoriaGasto = null;
 
 function switchView(name){
@@ -561,7 +562,7 @@ function switchView(name){
   document.getElementById('view-'+name).classList.add('active');
   document.querySelectorAll('.bottomnav > button').forEach(b=>b.classList.remove('active'));
   document.querySelector('.bottomnav button[data-view="'+name+'"]').classList.add('active');
-  const sinFab = (name==='resumen' || name==='visual');
+  const sinFab = (name==='visual');
   document.getElementById('fabBtn').style.display = sinFab ? 'none' : 'flex';
   currentView = name;
   if(name==='visual') renderVisual();
@@ -597,6 +598,12 @@ function switchCapaFiltro(capa){
   currentCapaFiltro = capa;
   document.querySelectorAll('#capaSegmented button').forEach(b=>b.classList.remove('active'));
   document.querySelector('#capaSegmented button[data-capa="'+capa+'"]').classList.add('active');
+  renderGastos();
+}
+function switchPersonaGastoFiltro(persona){
+  personaGastoFiltro = persona;
+  document.querySelectorAll('#personaGastoSegmented button').forEach(b=>b.classList.remove('active'));
+  document.querySelector('#personaGastoSegmented button[data-p="'+persona+'"]').classList.add('active');
   renderGastos();
 }
 function irAGastosPorCategoria(categoria){
@@ -644,7 +651,6 @@ function startListeners(){
 }
 
 function renderAll(){
-  renderResumen();
   renderIngresos();
   renderGastos();
   renderPlanificacion();
@@ -661,7 +667,10 @@ function renderAll(){
 // ================= HELPERS =================
 function q(m){ return "Q " + Number(m||0).toLocaleString('es-GT',{minimumFractionDigits:2, maximumFractionDigits:2}); }
 function fmtFecha(f){ if(!f) return ""; const d=new Date(f+"T00:00:00"); return d.toLocaleDateString('es-GT',{day:'2-digit',month:'short',year:'numeric'}); }
-function hoyISO(){ return new Date().toISOString().slice(0,10); }
+function hoyISO(){
+  const d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0');
+}
 function esc(s){ return String(s||"").replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function personaClass(p){
   if(p==='Katerine') return 'persona-katerine';
@@ -730,32 +739,6 @@ function tarjetaSaldoHTML(persona){
       <div class="sub">📌 Planificado: ${q(porPagar)}</div>
       <div class="sub">🐷 Ahorrado: ${q(saldoAhorro)}</div>
     </div>`;
-}
-
-function renderResumen(){
-  document.getElementById('balanceGrid').innerHTML =
-    tarjetaSaldoHTML('Katerine') + tarjetaSaldoHTML('Oliver');
-
-  const items = [
-    ...ingresos.map(i=>({tipo:'ingreso', fecha:i.fecha, desc:i.descripcion, monto:i.monto, persona:i.persona})),
-    ...gastos.map(g=>({tipo:'gasto', fecha:g.fecha, desc:g.descripcion, monto:g.monto, persona:g.quienPaga}))
-  ].sort((a,b)=> (a.fecha<b.fecha?1:-1)).slice(0,8);
-
-  const list = document.getElementById('recentList');
-  if(items.length===0){
-    list.innerHTML = `<div class="empty-state"><span class="ic">🧺</span>Todavía no hay movimientos registrados.</div>`;
-    return;
-  }
-  list.innerHTML = items.map(it=>`
-    <div class="receipt ${personaClass(it.persona)}">
-      <div class="receipt-row">
-        <div>
-          <div class="receipt-title">${esc(it.desc)||"(sin descripción)"}</div>
-          <div class="receipt-sub">${fmtFecha(it.fecha)} · ${esc(it.persona)}</div>
-        </div>
-        <div class="receipt-amount num">${it.tipo==='ingreso'?'+':'-'} ${q(it.monto)}</div>
-      </div>
-    </div>`).join("");
 }
 
 // ================= INGRESOS =================
@@ -827,6 +810,7 @@ function renderGastos(){
   let f = gastos;
   if(currentCapaFiltro==='SinCategoria') f = gastos.filter(g=>!g.categoria);
   else if(currentCapaFiltro!=='Todos') f = gastos.filter(g=>(g.capa||'Pareja')===currentCapaFiltro);
+  if(personaGastoFiltro!=='Todos') f = f.filter(g=>g.quienPaga===personaGastoFiltro || g.quienPaga==='50/50');
   if(filtroCategoriaGasto) f = f.filter(g=>g.categoria===filtroCategoriaGasto);
 
   const termino = (document.getElementById('gastoBuscar')?.value||'').trim();
@@ -962,7 +946,8 @@ function renderPlanificacion(){
       botones = `
         <button class="btn btn-ghost btn-small" onclick="deshacerEjecucion('${p.id}')">↩️ Deshacer</button>
         <button class="btn btn-ghost btn-small" onclick="abrirRepetirPlan('${p.id}')">🔁 Repetir</button>
-        <button class="btn btn-ghost btn-small" onclick="editarPlan('${p.id}')">✏️</button>`;
+        <button class="btn btn-ghost btn-small" onclick="editarPlan('${p.id}')">✏️</button>
+        <button class="btn btn-danger btn-small" onclick="borrarPlan('${p.id}')">🗑️</button>`;
     } else {
       botones = `
         <button class="btn btn-ghost btn-small" onclick="reactivarPlan('${p.id}')">♻️ Reactivar</button>
@@ -1045,8 +1030,29 @@ function abrirRepetirPlan(id){
     <div class="field"><label>Categoría</label>
       <select id="f_cat">${CATEGORIAS.map(c=>`<option ${c===p.categoria?'selected':''}>${c}</option>`).join("")}</select></div>
     <div class="field-check"><input type="checkbox" id="f_incluir" ${p.incluirEnSaldo!==false?'checked':''}><label>Restar del disponible desde ya</label></div>
-    <button class="btn btn-primary" onclick="guardarPlan()">Guardar plan</button>`;
+    <p class="hint"><strong>Volver a usar:</strong> este mismo plan se reabre con estos datos (no se crea uno nuevo). <strong>Duplicar:</strong> crea un plan aparte y este se queda como está.</p>
+    <div style="display:flex; gap:8px;">
+      <button class="btn btn-primary" style="flex:1;" onclick="reutilizarPlan('${id}')">♻️ Volver a usar</button>
+      <button class="btn btn-ghost" style="flex:1;" onclick="guardarPlan()">📄 Duplicar</button>
+    </div>`;
   document.getElementById('modalOverlay').classList.add('active');
+}
+function reutilizarPlan(id){
+  const concepto=document.getElementById('f_desc').value.trim();
+  const monto=parseFloat(document.getElementById('f_monto').value);
+  const mes=document.getElementById('f_mes').value;
+  const anio=parseInt(document.getElementById('f_anio').value);
+  const persona=document.getElementById('f_persona').value;
+  const categoria=document.getElementById('f_cat').value;
+  const incluirEnSaldo=document.getElementById('f_incluir').checked;
+  if(!concepto||!monto){ alert("Falta el concepto o el monto."); return; }
+  db.collection('planificacion').doc(id).update({
+    concepto, monto, mes, anio, persona, categoria, incluirEnSaldo,
+    estado:'Planificado', vecesPospuesto:0,
+    fechaEjecutado: firebase.firestore.FieldValue.delete(),
+    gastoVinculadoId: firebase.firestore.FieldValue.delete()
+  });
+  closeModal();
 }
 
 function abrirPagarPlan(id){
@@ -1056,7 +1062,8 @@ function abrirPagarPlan(id){
     <p class="hint">Presupuestado: ${q(p.monto)} · ${esc(p.persona)}</p>
     <div class="field"><label>¿Cuánto vas a pagar ahora? (Q)</label>
       <input id="f_montoPago" type="number" step="0.01" value="${p.monto}"></div>
-    <p class="hint">Si pagas el total, el plan se marca como pagado. Si pagas menos, el plan se queda "Planificado" con la diferencia pendiente.</p>
+    <div class="field-check"><input type="checkbox" id="f_cerrarPlan"><label>Ya terminé con esto — si pagué menos, que la diferencia quede libre (no seguir gastando este plan)</label></div>
+    <p class="hint">Si pagas el total, se marca como pagado automáticamente. Si pagas menos y NO marcas la casilla, el plan sigue "Planificado" con la diferencia pendiente por si vas a seguir gastando de a poco.</p>
     <button class="btn btn-ok" onclick="confirmarPagoPlan('${id}')">Confirmar pago</button>`;
   document.getElementById('modalOverlay').classList.add('active');
 }
@@ -1064,18 +1071,20 @@ function confirmarPagoPlan(id){
   const p = planes.find(x=>x.id===id); if(!p) return;
   const montoPago = parseFloat(document.getElementById('f_montoPago').value);
   if(!montoPago || montoPago<=0){ alert("Ingresa un monto válido."); return; }
+  const cerrar = document.getElementById('f_cerrarPlan').checked;
 
   const restante = Math.round((Number(p.monto) - montoPago) * 100) / 100;
 
-  if(restante <= 0.009){
-    // Pago completo: gasto real vinculado + plan pasa a Ejecutado (reversible con Deshacer)
+  if(restante <= 0.009 || cerrar){
+    // Pago completo (o cierre manual gastando menos): gasto real vinculado + plan pasa a Ejecutado
+    // usando el monto REAL gastado, liberando cualquier diferencia de inmediato.
     db.collection('gastos').add({
       fecha: hoyISO(), descripcion: p.concepto, monto: montoPago,
       quienPaga: p.persona, categoria: p.categoria||"", capa:'Pareja',
       vinculoPlanId: p.id, createdAt: firebase.firestore.FieldValue.serverTimestamp()
     }).then(ref=>{
       db.collection('planificacion').doc(id).update({
-        estado:'Ejecutado', fechaEjecutado: hoyISO(), gastoVinculadoId: ref.id
+        estado:'Ejecutado', fechaEjecutado: hoyISO(), monto: montoPago, gastoVinculadoId: ref.id
       });
     });
   } else {
@@ -1607,7 +1616,7 @@ function renderTarjeta(){
   });
 
   const hoy = new Date();
-  const pActual = periodoCorte(hoy.toISOString().slice(0,10));
+  const pActual = periodoCorte(hoyISO());
   const totalActual = grupos[pActual.label] ? grupos[pActual.label].total : 0;
 
   const libreGrid = ["Katerine","Oliver"].map(persona=>{
@@ -2019,6 +2028,8 @@ function renderVisual(){
     tarjetaSaldoHTML('Katerine') + tarjetaSaldoHTML('Oliver');
   document.getElementById('visualMutuo').innerHTML = tarjetaSaldoMutuoHTML();
   renderFunFacts();
+  renderComparativoMes();
+  renderTop3Gastos();
   renderChartAcumulado();
   renderChartCategoria();
   renderChartMensual();
@@ -2047,6 +2058,64 @@ function tarjetaSaldoMutuoHTML(){
       <div class="sub">📌 Planificado: ${q(porPagar)}</div>
       <div class="sub">🐷 Ahorrado: ${q(saldoAhorro)}</div>
     </div>`;
+}
+
+function renderComparativoMes(){
+  const hoy = new Date();
+  const prefijoActual = hoy.getFullYear()+"-"+String(hoy.getMonth()+1).padStart(2,'0');
+  const mesAnteriorDate = new Date(hoy.getFullYear(), hoy.getMonth()-1, 1);
+  const prefijoAnterior = mesAnteriorDate.getFullYear()+"-"+String(mesAnteriorDate.getMonth()+1).padStart(2,'0');
+
+  const gastosActual = gastos.filter(g=>(g.capa||'Pareja')==='Pareja' && g.fecha && g.fecha.startsWith(prefijoActual));
+  const gastosAnterior = gastos.filter(g=>(g.capa||'Pareja')==='Pareja' && g.fecha && g.fecha.startsWith(prefijoAnterior));
+
+  const totalActual = gastosActual.reduce((s,g)=>s+Number(g.monto||0),0);
+
+  const diaHoy = hoy.getDate();
+  const diasMesAnterior = new Date(mesAnteriorDate.getFullYear(), mesAnteriorDate.getMonth()+1, 0).getDate();
+  const diaComparable = Math.min(diaHoy, diasMesAnterior);
+  const totalAnteriorAlMismoDia = gastosAnterior
+    .filter(g=>parseInt(g.fecha.slice(8,10)) <= diaComparable)
+    .reduce((s,g)=>s+Number(g.monto||0),0);
+
+  const diff = totalActual - totalAnteriorAlMismoDia;
+  const pct = totalAnteriorAlMismoDia>0 ? Math.round((diff/totalAnteriorAlMismoDia)*100) : (totalActual>0?100:0);
+  const subiendo = diff > 0;
+
+  const diasEnMesActual = new Date(hoy.getFullYear(), hoy.getMonth()+1, 0).getDate();
+  const promedioDiarioActual = diaHoy>0 ? totalActual/diaHoy : 0;
+  const proyeccion = Math.round(promedioDiarioActual * diasEnMesActual * 100)/100;
+
+  document.getElementById('factGridComparativo').innerHTML = `
+    <div class="fact-card"><span class="ic">${subiendo?'📈':'📉'}</span>
+      <div class="val num" style="color:${subiendo?'var(--danger)':'var(--ok)'}">${subiendo?'+':''}${pct}%</div>
+      <div class="lbl">vs. mismo punto del mes pasado</div></div>
+    <div class="fact-card"><span class="ic">🔮</span>
+      <div class="val num">${q(proyeccion)}</div>
+      <div class="lbl">Proyección de gasto a fin de mes</div></div>`;
+}
+
+function renderTop3Gastos(){
+  const hoy = new Date();
+  const prefijo = hoy.getFullYear()+"-"+String(hoy.getMonth()+1).padStart(2,'0');
+  const gMes = gastos.filter(g=>(g.capa||'Pareja')==='Pareja' && g.fecha && g.fecha.startsWith(prefijo));
+  const top3 = [...gMes].sort((a,b)=>Number(b.monto||0)-Number(a.monto||0)).slice(0,3);
+  const cont = document.getElementById('top3Gastos');
+  if(top3.length===0){
+    cont.innerHTML = `<div class="empty-state"><span class="ic">🧾</span>Aún no hay gastos este mes.</div>`;
+    return;
+  }
+  const medallas = ['🥇','🥈','🥉'];
+  cont.innerHTML = top3.map((g,i)=>`
+    <div class="receipt ${personaClass(g.quienPaga)}">
+      <div class="receipt-row">
+        <div>
+          <div class="receipt-title">${medallas[i]} ${esc(g.descripcion)||'(sin descripción)'}</div>
+          <div class="receipt-sub">${fmtFecha(g.fecha)} · ${esc(g.quienPaga)} ${g.categoria?('· '+esc(g.categoria)):''}</div>
+        </div>
+        <div class="receipt-amount num">${q(g.monto)}</div>
+      </div>
+    </div>`).join("");
 }
 
 function renderFunFacts(){
