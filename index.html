@@ -532,8 +532,6 @@
         <canvas id="chartAhorro"></canvas>
       </div>
 
-      <div class="section-title"><h2>Progreso de metas</h2></div>
-      <div id="metasVisualList"></div>
     </section>
   </main>
 
@@ -980,16 +978,35 @@ function calcularAhorro(id){
 }
 // TOTAL = dinero real que hay. DISPONIBLE = total - lo planificado pendiente.
 // "Gasto desde ahorro" resta del ahorro pero no del disponible (ese dinero ya salió al aportarlo).
+// Una suscripción está "pendiente" si este mes todavía no se ha debitado.
+// Las anuales solo cuentan en su mes de cobro (el mes del último débito o, si nunca se ha debitado, el mes en que se registró).
+function subPendienteMes(s, hoy){
+  if(!s.activa) return false;
+  hoy = hoy || new Date();
+  const prefijo = prefijoMes(hoy);
+  if(s.ultimoDebito && s.ultimoDebito.startsWith(prefijo)) return false;
+  if(s.frecuencia==='Anual'){
+    const ref = s.ultimoDebito || s.fechaInicio;
+    if(!ref) return false;
+    return Number(ref.slice(5,7))-1 === hoy.getMonth();
+  }
+  return true;
+}
+function subsPendientesCuenta(id){
+  return suscripciones.filter(x=>subPendienteMes(x)).reduce((t,x)=>t+parteDe(x.quienPaga, x.division, x.monto, id),0);
+}
 function calcularSaldo(id){
   const totalIngresos = ingresos.filter(i=>i.persona===id).reduce((s,i)=>s+Number(i.monto||0),0);
   const totalGastos = gastos.reduce((s,g)=>s+parteDe(g.quienPaga, g.division, g.monto, id),0);
   const {aportes, retiros, saldoAhorro} = calcularAhorro(id);
   const inicial = Number(saldosIniciales[id]||0);
   const total = inicial + totalIngresos - totalGastos - aportes + retiros;
-  const porPagar = planes
+  const porPagarPlanes = planes
     .filter(p=>p.persona===id && p.estado==='Planificado' && p.incluirEnSaldo!==false)
     .reduce((s,p)=>s+Number(p.monto||0),0);
-  return { total, porPagar, disponible: total - porPagar, saldoAhorro };
+  const porPagarSubs = subsPendientesCuenta(id);
+  const porPagar = porPagarPlanes + porPagarSubs;
+  return { total, porPagar, porPagarPlanes, porPagarSubs, disponible: total - porPagar, saldoAhorro };
 }
 function calcularAvanceMeta(metaId){
   const movs = ahorros.filter(a=>a.metaId===metaId);
@@ -1013,7 +1030,7 @@ function contarReferencias(id){
 }
 
 function tarjetaSaldoHTML(id){
-  const {total, porPagar, disponible, saldoAhorro} = calcularSaldo(id);
+  const {total, porPagar, porPagarSubs, disponible, saldoAhorro} = calcularSaldo(id);
   return `
     <div class="balance-card" style="${fondoCuenta(id)}">
       <div class="name">${esc(nombreCuenta(id))}</div>
@@ -1027,6 +1044,7 @@ function tarjetaSaldoHTML(id){
         <div class="mid num ${disponible<0?'neg':''}">${q(disponible)}</div>
       </div>
       <div class="sub">📌 Planificado: ${q(porPagar)}</div>
+      ${porPagarSubs>0.004?`<div class="sub" style="padding-left:18px;">incluye 🔁 ${q(porPagarSubs)} de subs</div>`:''}
       <div class="sub">🐷 Ahorrado: ${q(saldoAhorro)}</div>
     </div>`;
 }
@@ -1411,6 +1429,7 @@ function renderAhorro(){
           <div class="receipt-title">${esc(etiquetaTipo)}${a.nota?(' · '+esc(a.nota)):''}</div>
           <div class="receipt-sub">${fmtFecha(a.fecha)} · ${esc(nombreCuenta(a.quien))} ${a.categoria?('· '+esc(a.categoria)):''}${meta?(' · Meta: '+esc(meta.nombre)):''}</div>
           ${a.tipo==='GastoAhorro'?'<span class="tag">No toca el disponible</span>':''}
+          ${a.origen==='uso-meta'?'<span class="tag pagado">🛍️ Uso de meta</span>':''}
         </div>
         <div class="receipt-amount num" style="color:${color}">${signo} ${q(a.monto)}</div>
       </div>
@@ -1473,30 +1492,129 @@ function renderMetas(){
     list.innerHTML = `<div class="empty-state"><span class="ic">🎯</span>Aún no hay metas. Toca + para crear una (una compra, un viaje, un fondo...).</div>`;
     return;
   }
-  list.innerHTML = metas.map(m=>{
+  const ordenadas = [...metas].sort((a,b)=>(a.estado==='Usada'?1:0)-(b.estado==='Usada'?1:0));
+  list.innerHTML = ordenadas.map(m=>{
     const llevo = calcularAvanceMeta(m.id);
     const pct = m.montoObjetivo>0 ? Math.min(100, Math.round((llevo/m.montoObjetivo)*100)) : 0;
-    const estadoTag = m.estado==='Pausada' ? '<span class="tag">⏸️ Pausada</span>'
+    const usada = m.estado==='Usada';
+    const estadoTag = usada ? `<span class="tag pagado">🛍️ Usada${m.fechaUso?' el '+fmtFecha(m.fechaUso):''}</span>`
+      : m.estado==='Pausada' ? '<span class="tag">⏸️ Pausada</span>'
       : (llevo>=m.montoObjetivo ? '<span class="tag pagado">✅ Cumplida</span>' : '');
     const porMes = m.meses>0 ? m.montoObjetivo/m.meses : 0;
-    return `
-    <div class="meta-card">
-      ${m.fotoURL ? `<img class="meta-photo" src="${esc(m.fotoURL)}" alt="">` : `<div class="meta-photo placeholder">🎯</div>`}
-      <div class="meta-info">
-        <div class="title">${esc(m.nombre)} ${estadoTag}</div>
-        <div class="prog-text">${q(llevo)} de ${q(m.montoObjetivo)} · ${pct}% · ${m.meses} meses (≈${q(porMes)}/mes)</div>
-        <div class="meta-bar-track"><div class="meta-bar-fill" style="width:${pct}%"></div></div>
-        <div class="actions-row">
-          <button class="btn btn-ok btn-small" onclick="openAportarMeta('${m.id}')">💰 Aportar</button>
+    const texto = usada
+      ? `Se usaron ${q(m.montoUsado||llevo)} del ahorro${m.notaUso?(' · '+esc(m.notaUso)):''}`
+      : `${q(llevo)} de ${q(m.montoObjetivo)} · ${pct}% · ${m.meses} meses (≈${q(porMes)}/mes)`;
+    const botones = usada ? `
+          <button class="btn btn-ghost btn-small" onclick="deshacerUsoMeta('${m.id}')">↩️ Deshacer uso</button>
+          <button class="btn btn-ghost btn-small" onclick="eliminarMeta('${m.id}')" aria-label="Borrar">🗑️</button>` : `
+          ${llevo>0?`<button class="btn btn-ok btn-small" onclick="abrirUsarMeta('${m.id}')">🛍️ Usar ahorro</button>`:''}
+          <button class="btn ${llevo>0?'btn-ghost':'btn-ok'} btn-small" onclick="openAportarMeta('${m.id}')">💰 Aportar</button>
           <button class="btn btn-ghost btn-small" onclick="openEditarMeta('${m.id}')" aria-label="Editar">✏️</button>
           ${m.estado!=='Pausada'
-            ? `<button class="btn btn-ghost btn-small" onclick="pausarMeta('${m.id}')">⏸️ Pausar</button>`
+            ? `<button class="btn btn-ghost btn-small" onclick="pausarMeta('${m.id}')" aria-label="Pausar">⏸️</button>`
             : `<button class="btn btn-ghost btn-small" onclick="reactivarMeta('${m.id}')">▶️ Reactivar</button>`}
-          <button class="btn btn-ghost btn-small" onclick="eliminarMeta('${m.id}')" aria-label="Borrar">🗑️</button>
-        </div>
+          <button class="btn btn-ghost btn-small" onclick="eliminarMeta('${m.id}')" aria-label="Borrar">🗑️</button>`;
+    return `
+    <div class="meta-card" ${usada?'style="opacity:.7;"':''}>
+      ${m.fotoURL ? `<img class="meta-photo" src="${esc(m.fotoURL)}" alt="">` : `<div class="meta-photo placeholder">${usada?'🛍️':'🎯'}</div>`}
+      <div class="meta-info">
+        <div class="title">${esc(m.nombre)} ${estadoTag}</div>
+        <div class="prog-text">${texto}</div>
+        <div class="meta-bar-track"><div class="meta-bar-fill" style="width:${pct}%"></div></div>
+        <div class="actions-row">${botones}</div>
       </div>
     </div>`;
   }).join("");
+}
+
+// ----- Usar el dinero de una meta -----
+// Crea un "Gasto desde ahorro" por cada cuenta que aportó, en proporción a lo que aportó.
+// Resta del ahorro, pero no del disponible (ese dinero ya había salido al aportarlo).
+function aportesMetaPorCuenta(metaId){
+  const neto = {};
+  ahorros.filter(a=>a.metaId===metaId && (a.tipo==='Aporte' || a.tipo==='Retiro')).forEach(a=>{
+    neto[a.quien] = (neto[a.quien]||0) + (a.tipo==='Aporte' ? 1 : -1) * Number(a.monto||0);
+  });
+  return Object.entries(neto).filter(([,v])=>v>0.004).map(([id,v])=>({ id, monto:v }));
+}
+function repartoUsoMeta(metaId, monto){
+  const aportes = aportesMetaPorCuenta(metaId);
+  const total = aportes.reduce((s,a)=>s+a.monto,0);
+  if(!aportes.length || total<=0) return [];
+  let acumulado = 0;
+  return aportes.map((a,i)=>{
+    const parte = i===aportes.length-1 ? Math.round((monto-acumulado)*100)/100 : Math.round(monto*a.monto/total*100)/100;
+    acumulado += parte;
+    return { id:a.id, monto:parte };
+  }).filter(x=>x.monto>0);
+}
+function abrirUsarMeta(metaId){
+  const m = metas.find(x=>x.id===metaId); if(!m) return;
+  const llevo = calcularAvanceMeta(metaId);
+  document.getElementById('modalTitle').textContent = "Usar ahorro: " + m.nombre;
+  document.getElementById('modalBody').innerHTML = `
+    <p class="hint" style="margin:0 0 14px;">Ahorrado para esta meta: <b>${q(llevo)}</b></p>
+    <div class="field"><label>¿Cuánto usaron? (Q)</label>
+      <input id="f_monto" type="number" step="0.01" inputmode="decimal" value="${Math.round(llevo*100)/100}" oninput="previewUsoMeta('${metaId}')"></div>
+    <div class="field"><label>Fecha</label><input id="f_fecha" type="date" value="${hoyISO()}"></div>
+    <div class="field"><label>Nota (opcional)</label><input id="f_nota" placeholder="Ej. Compra del removedor"></div>
+    <div id="usoMetaPreview"></div>
+    <div class="field-check"><input type="checkbox" id="f_cerrar" checked><label for="f_cerrar">Marcar la meta como usada</label></div>
+    ${ayuda('Se resta del ahorro de cada cuenta según lo que aportó, y queda en la lista de Ahorro como "Gasto desde ahorro". Tu disponible no cambia: ese dinero ya había salido cuando lo ahorraron. Si usaron menos de lo ahorrado, lo que sobra se queda como ahorro general.', '¿Qué pasa al usarlo?')}
+    <button class="btn btn-primary" onclick="confirmarUsoMeta('${metaId}')">🛍️ Usar ahorro</button>`;
+  previewUsoMeta(metaId);
+  document.getElementById('modalOverlay').classList.add('active');
+}
+function previewUsoMeta(metaId){
+  const monto = parseFloat(document.getElementById('f_monto').value)||0;
+  const llevo = calcularAvanceMeta(metaId);
+  const reparto = repartoUsoMeta(metaId, monto);
+  const el = document.getElementById('usoMetaPreview'); if(!el) return;
+  if(!reparto.length){
+    el.innerHTML = cuentas.length ? `<div class="field"><label>¿De qué ahorro sale?</label>${selectorCuentaSimple('f_persona', null)}</div>` : '';
+    return;
+  }
+  el.innerHTML = `<div class="ocr-estado" style="margin:0 0 14px;">Se descuenta del ahorro de:<br>${reparto.map(r=>`<span class="dot" style="background:${colorCuenta(r.id)[0]}"></span> <b>${esc(nombreCuenta(r.id))}</b>: ${q(r.monto)}`).join('<br>')}
+    ${monto>llevo+0.004?`<br><span class="ocr-dup">Es más de lo ahorrado para esta meta; la diferencia sale del resto de su ahorro.</span>`:''}
+    ${monto<llevo-0.004?`<br>Sobran ${q(llevo-monto)}, que se quedan como ahorro general.`:''}</div>`;
+}
+function confirmarUsoMeta(metaId){
+  const m = metas.find(x=>x.id===metaId); if(!m) return;
+  const monto = parseFloat(document.getElementById('f_monto').value);
+  const fecha = document.getElementById('f_fecha').value;
+  const nota = document.getElementById('f_nota').value.trim();
+  const cerrar = document.getElementById('f_cerrar').checked;
+  if(!monto || monto<=0 || !fecha){ alert("Falta el monto o la fecha."); return; }
+  let reparto = repartoUsoMeta(metaId, monto);
+  if(!reparto.length){
+    const sel = document.getElementById('f_persona');
+    if(!sel){ alert("Primero agrega una cuenta en Ajustes."); return; }
+    reparto = [{ id: sel.value, monto }];
+  }
+  const batch = db.batch();
+  reparto.forEach(r=>{
+    batch.set(col('ahorros').doc(), {
+      tipo:'GastoAhorro', quien:r.id, monto:r.monto, fecha, categoria:'🐷 Ahorro / Inversión',
+      nota: m.nombre + (nota?(' · '+nota):''), metaId, origen:'uso-meta',
+      createdAt: FieldValue.serverTimestamp()
+    });
+  });
+  const cambios = { montoUsado: monto, fechaUso: fecha, notaUso: nota };
+  if(cerrar){ cambios.estadoPrevio = m.estado||'Activa'; cambios.estado = 'Usada'; }
+  batch.update(col('metas').doc(metaId), cambios);
+  batch.commit().catch(e=>alert("No se pudo guardar: "+e.message));
+  closeModal();
+}
+function deshacerUsoMeta(metaId){
+  const m = metas.find(x=>x.id===metaId); if(!m) return;
+  if(!confirm(`¿Deshacer el uso de "${m.nombre}"? El dinero vuelve al ahorro y la meta queda activa otra vez.`)) return;
+  const batch = db.batch();
+  ahorros.filter(a=>a.metaId===metaId && a.origen==='uso-meta').forEach(a=>batch.delete(col('ahorros').doc(a.id)));
+  batch.update(col('metas').doc(metaId), {
+    estado: m.estadoPrevio && m.estadoPrevio!=='Usada' ? m.estadoPrevio : 'Activa',
+    estadoPrevio: FieldValue.delete(), montoUsado: FieldValue.delete(), fechaUso: FieldValue.delete(), notaUso: FieldValue.delete()
+  });
+  batch.commit().catch(e=>alert("No se pudo deshacer: "+e.message));
 }
 function pausarMeta(id){ col('metas').doc(id).update({estado:'Pausada'}); }
 function reactivarMeta(id){ col('metas').doc(id).update({estado:'Activa'}); }
@@ -1994,18 +2112,22 @@ function proximoCobroDate(s){
 function proximoCobro(s){ const d = proximoCobroDate(s); return d ? d.toLocaleDateString('es-GT',{day:'2-digit',month:'short',year:'numeric'}) : "Inactiva"; }
 function renderSuscripciones(){
   const activas = suscripciones.filter(s=>s.activa);
-  const porCuenta = cuentas.map(c=>({ c, t: activas.reduce((s,x)=>s+montoMensualSubCuenta(x,c.id),0) }));
+  const porCuenta = cuentas.map(c=>({ c, t: activas.reduce((s,x)=>s+montoMensualSubCuenta(x,c.id),0), pend: subsPendientesCuenta(c.id) }));
   const total = activas.reduce((s,x)=>s+montoMensualSub(x),0);
+  const totalPend = suscripciones.filter(x=>subPendienteMes(x)).reduce((t,x)=>t+Number(x.monto||0),0);
+  const nPend = suscripciones.filter(x=>subPendienteMes(x)).length;
   document.getElementById('subsResumen').innerHTML = `
     <div class="balance-grid" style="margin-bottom:6px;">
-      ${porCuenta.map(({c,t})=>`
+      ${porCuenta.map(({c,t,pend})=>`
         <div class="balance-card" style="${fondoCuenta(c.id)}">
-          <div class="name">${esc(c.nombre)} · al mes</div>
-          <div class="bc-block"><div class="big num">${q(t)}</div></div>
+          <div class="name">${esc(c.nombre)}</div>
+          <div class="bc-block"><div class="lbl">Falta pagar este mes</div><div class="big num">${q(pend)}</div></div>
+          <div class="bc-divider"></div>
+          <div class="bc-block"><div class="lbl">Al mes</div><div class="mid num">${q(t)}</div></div>
         </div>`).join('')}
     </div>
-    ${cuentas.length>1?`<div class="subtle-note" style="margin:6px 0 8px;">Total: <strong>${q(total)}</strong> al mes</div>`:''}
-    ${ayuda(`${activas.length} suscripción(es) activa(s). Las anuales se cuentan divididas entre 12 para compararlas por mes. Nada se descuenta solo: usa 💸 Debitar cuando te cobren.`, 'Detalle')}`;
+    ${cuentas.length>1?`<div class="subtle-note" style="margin:6px 0 8px;">Entre todos: <strong>${q(totalPend)}</strong> por pagar este mes (${nPend}) · <strong>${q(total)}</strong> al mes</div>`:''}
+    ${ayuda(`Lo que falta pagar ya se cuenta como planificado, así que el disponible de cada cuenta ya lo tiene restado. Cuando te cobren, toca 💸 Debitar: se crea el gasto y deja de contar como pendiente. Las anuales solo cuentan como pendientes en su mes de cobro, y en "Al mes" se ven divididas entre 12.`, '¿Cómo se calcula?')}`;
 
   const list = document.getElementById('subsList');
   if(suscripciones.length===0){
@@ -2032,9 +2154,9 @@ function renderSuscripciones(){
           <div class="receipt-sub">${esc(s.frecuencia)} · día ${s.diaCobro} · ${esc(etiquetaQuien(s.quienPaga, s.division))}</div>
           <div class="receipt-sub">Próximo cobro: ${proximoCobro(s)}</div>
           <span class="tag ${s.activa?'pagado':''}">${s.activa?'🟢 Activa':'⚪ Inactiva'}</span>
-          ${s.ultimoDebito
-            ? `<span class="tag ${debitadaEsteMes?'pagado':'pendiente'}">${debitadaEsteMes?'✅ Debitada este mes':'⏳ Última vez: '+fmtFecha(s.ultimoDebito)}</span>`
-            : '<span class="tag pendiente">⏳ Aún no debitada</span>'}
+          ${!s.activa ? '' : debitadaEsteMes ? '<span class="tag pagado">✅ Debitada este mes</span>'
+            : subPendienteMes(s) ? '<span class="tag pendiente">⏳ Pendiente este mes</span>'
+            : `<span class="tag">📅 No toca este mes${s.ultimoDebito?' · última: '+fmtFecha(s.ultimoDebito):''}</span>`}
         </div>
         <div class="receipt-amount num">${q(s.monto)}</div>
       </div>
@@ -2227,7 +2349,6 @@ function renderVisual(){
   renderChartCategoria();
   renderChartMensual();
   renderChartAhorro();
-  renderMetasVisual();
 }
 function tarjetaSaldoMutuoHTML(){
   const s = cuentas.map(c=>calcularSaldo(c.id));
@@ -2243,31 +2364,34 @@ function tarjetaSaldoMutuoHTML(){
       <div class="sub">🐷 Ahorrado: ${q(sum('saldoAhorro'))}</div>
     </div>`;
 }
+const DIAS_SEMANA = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
 function renderComparativoMes(){
   const hoy = new Date();
-  const ant = new Date(hoy.getFullYear(), hoy.getMonth()-1, 1);
-  const gen = gastosGenerales();
-  const totalActual = gen.filter(g=>g.fecha && g.fecha.startsWith(prefijoMes(hoy))).reduce((s,g)=>s+Number(g.monto||0),0);
-  const diaHoy = hoy.getDate();
-  const diaComparable = Math.min(diaHoy, new Date(ant.getFullYear(), ant.getMonth()+1, 0).getDate());
-  const totalAnterior = gen.filter(g=>g.fecha && g.fecha.startsWith(prefijoMes(ant)) && parseInt(g.fecha.slice(8,10))<=diaComparable)
-    .reduce((s,g)=>s+Number(g.monto||0),0);
-  const diff = totalActual - totalAnterior;
-  const pct = totalAnterior>0 ? Math.round((diff/totalAnterior)*100) : (totalActual>0?100:0);
-  const subiendo = diff > 0;
-  const diasMes = new Date(hoy.getFullYear(), hoy.getMonth()+1, 0).getDate();
-  const proyeccion = diaHoy>0 ? Math.round(totalActual/diaHoy*diasMes*100)/100 : 0;
+  // Día de la semana en que más gastan (promedio de los últimos 3 meses)
+  const desde = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()-90);
+  const desdeISO = ocrISO ? ocrISO(desde) : prefijoMes(desde)+'-01';
+  const total = [0,0,0,0,0,0,0], veces = [0,0,0,0,0,0,0];
+  for(let d=new Date(desde); d<=hoy; d.setDate(d.getDate()+1)) veces[d.getDay()]++;
+  gastos.filter(g=>!esTransfer(g) && g.fecha && g.fecha>=desdeISO).forEach(g=>{
+    total[new Date(g.fecha+'T00:00:00').getDay()] += Number(g.monto||0);
+  });
+  const prom = total.map((t,i)=>veces[i] ? t/veces[i] : 0);
+  let diaTop = -1; prom.forEach((v,i)=>{ if(v>0 && (diaTop<0 || v>prom[diaTop])) diaTop=i; });
+  // Lo que les queda libre por día hasta fin de mes
+  const disponible = cuentas.reduce((t,c)=>t+calcularSaldo(c.id).disponible,0);
+  const diasRestantes = new Date(hoy.getFullYear(), hoy.getMonth()+1, 0).getDate() - hoy.getDate() + 1;
+  const porDia = disponible / diasRestantes;
   document.getElementById('factGridComparativo').innerHTML = `
-    <div class="fact-card"><span class="ic">${subiendo?'📈':'📉'}</span>
-      <div class="val num" style="color:${subiendo?'var(--danger)':'var(--ok)'}">${subiendo?'+':''}${pct}%</div>
-      <div class="lbl">vs. el mismo día del mes pasado</div></div>
-    <div class="fact-card"><span class="ic">🔮</span>
-      <div class="val num">${q(proyeccion)}</div>
-      <div class="lbl">Si sigues a este ritmo, gastarás este mes</div></div>`;
+    <div class="fact-card"><span class="ic">🗓️</span>
+      <div class="val">${diaTop<0 ? '—' : DIAS_SEMANA[diaTop].charAt(0).toUpperCase()+DIAS_SEMANA[diaTop].slice(1)}</div>
+      <div class="lbl">${diaTop<0 ? 'Día en que más gastan' : `Día en que más gastan · ≈${q(prom[diaTop])} en promedio`}</div></div>
+    <div class="fact-card"><span class="ic">🧮</span>
+      <div class="val num" style="${porDia<0?'color:var(--danger)':''}">${q(porDia)}</div>
+      <div class="lbl">Libre por día hasta fin de mes (${diasRestantes} día${diasRestantes===1?'':'s'})</div></div>`;
 }
 function renderTop3Gastos(){
   const prefijo = prefijoMes(new Date());
-  const top3 = gastosGenerales().filter(g=>g.fecha && g.fecha.startsWith(prefijo))
+  const top3 = gastos.filter(g=>!esTransfer(g) && g.fecha && g.fecha.startsWith(prefijo))
     .sort((a,b)=>Number(b.monto||0)-Number(a.monto||0)).slice(0,3);
   const cont = document.getElementById('top3Gastos');
   if(top3.length===0){ cont.innerHTML = `<div class="empty-state"><span class="ic">🧾</span>Aún no hay gastos este mes.</div>`; return; }
@@ -2391,28 +2515,6 @@ function renderChartAhorro(){
     options:{ plugins:{ legend:{ display:false } }, scales:{ y:{ beginAtZero:true } } }
   });
 }
-function renderMetasVisual(){
-  const list = document.getElementById('metasVisualList');
-  if(metas.length===0){ list.innerHTML = `<div class="empty-state"><span class="ic">🎯</span>Cuando creen una meta, aquí verás su avance.</div>`; return; }
-  const base = paleta()[0][0];
-  list.innerHTML = metas.map(m=>{
-    const llevo = calcularAvanceMeta(m.id);
-    const pct = m.montoObjetivo>0 ? Math.min(100, Math.round((llevo/m.montoObjetivo)*100)) : 0;
-    const color = pct>=100 ? '#3E8E7E' : base;
-    return `
-    <div class="meta-card">
-      <div class="ring-wrap">
-        <div class="ring" style="background:conic-gradient(${color} ${pct*3.6}deg, var(--track) 0deg);"></div>
-        <div class="ring-center">${pct}%</div>
-      </div>
-      <div class="meta-info">
-        <div class="title">${esc(m.nombre)}</div>
-        <div class="prog-text">${q(llevo)} de ${q(m.montoObjetivo)}</div>
-      </div>
-    </div>`;
-  }).join("");
-}
-
 // ================= AJUSTES =================
 let ajustesBorrador = null, ajustesAbierto = false;
 
