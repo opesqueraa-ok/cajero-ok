@@ -257,6 +257,13 @@
   .meta-info .prog-text{ font-size:12px; color:var(--text-soft); font-weight:600; margin-top:2px; }
   .meta-bar-track{ height:8px; background:var(--track); border-radius:8px; margin-top:8px; overflow:hidden; }
   .meta-bar-fill{ height:100%; border-radius:8px; background:linear-gradient(90deg, var(--acc-a), var(--acc-b)); }
+  .meta-bar-multi{ display:flex; gap:2px; }
+  .meta-bar-multi > span{ height:100%; display:block; }
+  .meta-bar-multi > span:first-child{ border-radius:8px 0 0 8px; }
+  .meta-bar-multi > span:last-child{ border-radius:0 8px 8px 0; }
+  .meta-bar-multi > span:only-child{ border-radius:8px; }
+  .meta-leyenda{ display:flex; flex-wrap:wrap; gap:4px 12px; margin-top:6px; font-size:11.5px; font-weight:700; color:var(--text-soft); }
+  .meta-leyenda span{ display:inline-flex; align-items:center; gap:5px; }
   .ring-wrap{ position:relative; width:78px; height:78px; flex-shrink:0; }
   .ring{ width:78px; height:78px; border-radius:50%; }
   .ring-center{
@@ -498,7 +505,7 @@
       <div class="fact-grid" id="factGridComparativo" style="margin-top:-4px;"></div>
 
       <div class="chart-card">
-        <h3>Top 3 gastos más grandes del mes</h3>
+        <h3>Top 10 gastos más grandes del mes</h3>
         <div id="top3Gastos"></div>
       </div>
 
@@ -1547,7 +1554,7 @@ function renderMetas(){
       <div class="meta-info">
         <div class="title">${esc(m.nombre)} ${estadoTag}</div>
         <div class="prog-text">${texto}</div>
-        <div class="meta-bar-track"><div class="meta-bar-fill" style="width:${pct}%"></div></div>
+        ${barraMetaHTML(m, usada, pct)}
         <div class="actions-row">${botones}</div>
       </div>
     </div>`;
@@ -1557,6 +1564,20 @@ function renderMetas(){
 // ----- Usar el dinero de una meta -----
 // Crea un "Gasto desde ahorro" por cada cuenta que aportó, en proporción a lo que aportó.
 // Resta del ahorro, pero no del disponible (ese dinero ya había salido al aportarlo).
+// Barra de progreso dividida por colores: cada cuenta ocupa el tramo de lo que aportó.
+function barraMetaHTML(m, usada, pct){
+  const partes = (usada ? aportesMetaPorCuenta(m.id) : saldoMetaPorCuenta(m.id))
+    .sort((a,b)=>ordenCuenta(a.id)-ordenCuenta(b.id));
+  const total = partes.reduce((t,x)=>t+x.monto,0);
+  if(!partes.length || total<=0) return `<div class="meta-bar-track"></div>`;
+  const tramos = partes.map(x=>{
+    const [a,b] = colorCuenta(x.id);
+    return `<span style="width:${(x.monto/total*100).toFixed(2)}%; background:linear-gradient(90deg, ${a}, ${b});"></span>`;
+  }).join('');
+  const leyenda = cuentas.length>1 ? `<div class="meta-leyenda">${partes.map(x=>
+    `<span><span class="dot" style="background:${colorCuenta(x.id)[0]}"></span>${esc(nombreCuenta(x.id))} ${q(x.monto)} · ${Math.round(x.monto/total*100)}%</span>`).join('')}</div>` : '';
+  return `<div class="meta-bar-track"><div class="meta-bar-multi" style="width:${pct}%; height:100%;">${tramos}</div></div>${leyenda}`;
+}
 function aportesMetaPorCuenta(metaId){
   const neto = {};
   ahorros.filter(a=>a.metaId===metaId && (a.tipo==='Aporte' || a.tipo==='Retiro')).forEach(a=>{
@@ -2499,16 +2520,18 @@ function renderComparativoMes(){
 }
 function renderTop3Gastos(){
   const prefijo = prefijoMes(new Date());
-  const top3 = gastos.filter(g=>!esTransfer(g) && g.fecha && g.fecha.startsWith(prefijo))
-    .sort((a,b)=>Number(b.monto||0)-Number(a.monto||0)).slice(0,3);
+  const delMes = gastos.filter(g=>!esTransfer(g) && g.fecha && g.fecha.startsWith(prefijo));
+  const top3 = [...delMes].sort((a,b)=>Number(b.monto||0)-Number(a.monto||0)).slice(0,10);
   const cont = document.getElementById('top3Gastos');
   if(top3.length===0){ cont.innerHTML = `<div class="empty-state"><span class="ic">🧾</span>Aún no hay gastos este mes.</div>`; return; }
   const medallas = ['🥇','🥈','🥉'];
-  cont.innerHTML = top3.map((g,i)=>`
+  const sumaTop = top3.reduce((t,g)=>t+Number(g.monto||0),0);
+  const sumaMes = delMes.reduce((t,g)=>t+Number(g.monto||0),0);
+  cont.innerHTML = `<div class="subtle-note" style="margin:-4px 0 12px;">Estos ${top3.length} suman <b>${q(sumaTop)}</b>${sumaMes>0?`, el ${Math.round(sumaTop/sumaMes*100)}% de lo gastado este mes`:''}.</div>` + top3.map((g,i)=>`
     <div class="receipt" style="--bar:${barBg(g.quienPaga, g.division)}">
       <div class="receipt-row">
         <div>
-          <div class="receipt-title">${medallas[i]} ${esc(g.descripcion)||'(sin descripción)'}</div>
+          <div class="receipt-title">${medallas[i]||`<span style="display:inline-block; min-width:22px; color:var(--text-soft);">${i+1}.</span>`} ${esc(g.descripcion)||'(sin descripción)'}</div>
           <div class="receipt-sub">${fmtFecha(g.fecha)} · ${esc(etiquetaQuien(g.quienPaga, g.division))} ${g.categoria?('· '+esc(g.categoria)):''}</div>
         </div>
         <div class="receipt-amount num">${q(g.monto)}</div>
