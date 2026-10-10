@@ -1008,6 +1008,16 @@ function calcularSaldo(id){
   const porPagar = porPagarPlanes + porPagarSubs;
   return { total, porPagar, porPagarPlanes, porPagarSubs, disponible: total - porPagar, saldoAhorro };
 }
+// Dinero que todavía está guardado en una meta (aportes - retiros - lo que ya se usó)
+function saldoMetaPorCuenta(metaId){
+  const neto = {};
+  ahorros.filter(a=>a.metaId===metaId).forEach(a=>{
+    const signo = a.tipo==='Aporte' ? 1 : -1;
+    neto[a.quien] = (neto[a.quien]||0) + signo*Number(a.monto||0);
+  });
+  return Object.entries(neto).filter(([,v])=>v>0.004).map(([id,v])=>({ id, monto:Math.round(v*100)/100 }));
+}
+function saldoMeta(metaId){ return Math.round(saldoMetaPorCuenta(metaId).reduce((t,x)=>t+x.monto,0)*100)/100; }
 function calcularAvanceMeta(metaId){
   const movs = ahorros.filter(a=>a.metaId===metaId);
   const ap = movs.filter(a=>a.tipo==='Aporte').reduce((s,a)=>s+Number(a.monto||0),0);
@@ -1430,6 +1440,7 @@ function renderAhorro(){
           <div class="receipt-sub">${fmtFecha(a.fecha)} · ${esc(nombreCuenta(a.quien))} ${a.categoria?('· '+esc(a.categoria)):''}${meta?(' · Meta: '+esc(meta.nombre)):''}</div>
           ${a.tipo==='GastoAhorro'?'<span class="tag">No toca el disponible</span>':''}
           ${a.origen==='uso-meta'?'<span class="tag pagado">🛍️ Uso de meta</span>':''}
+          ${a.origen==='traspaso-meta'?'<span class="tag">↔️ Entre metas</span>':''}
         </div>
         <div class="receipt-amount num" style="color:${color}">${signo} ${q(a.monto)}</div>
       </div>
@@ -1440,7 +1451,17 @@ function renderAhorro(){
     </div>`;
   }).join("");
 }
-function eliminarAhorro(id){ if(confirm("¿Borrar este movimiento de ahorro?")) col('ahorros').doc(id).delete(); }
+function eliminarAhorro(id){
+  const a = ahorros.find(x=>x.id===id);
+  if(a && a.traspasoId){
+    if(!confirm("Este movimiento es parte de un paso de dinero entre metas. ¿Deshacer el paso completo? El dinero vuelve a la meta de origen.")) return;
+    const batch = db.batch();
+    ahorros.filter(x=>x.traspasoId===a.traspasoId).forEach(x=>batch.delete(col('ahorros').doc(x.id)));
+    batch.commit();
+    return;
+  }
+  if(confirm("¿Borrar este movimiento de ahorro?")) col('ahorros').doc(id).delete();
+}
 function formAhorroCampos(a){
   return `
     <div class="field"><label>Tipo</label>
@@ -1493,22 +1514,28 @@ function renderMetas(){
     return;
   }
   const ordenadas = [...metas].sort((a,b)=>(a.estado==='Usada'?1:0)-(b.estado==='Usada'?1:0));
+  const hayOtras = metas.filter(x=>x.estado!=='Usada').length > 1;
   list.innerHTML = ordenadas.map(m=>{
-    const llevo = calcularAvanceMeta(m.id);
-    const pct = m.montoObjetivo>0 ? Math.min(100, Math.round((llevo/m.montoObjetivo)*100)) : 0;
     const usada = m.estado==='Usada';
+    const llevo = usada ? calcularAvanceMeta(m.id) : saldoMeta(m.id);
+    const guardado = saldoMeta(m.id);
+    const sobra = usada ? guardado : Math.max(0, Math.round((guardado - Number(m.montoObjetivo||0))*100)/100);
+    const destinos = metas.filter(x=>x.id!==m.id && x.estado!=='Usada').length;
+    const pct = m.montoObjetivo>0 ? Math.min(100, Math.round((llevo/m.montoObjetivo)*100)) : 0;
     const estadoTag = usada ? `<span class="tag pagado">🛍️ Usada${m.fechaUso?' el '+fmtFecha(m.fechaUso):''}</span>`
       : m.estado==='Pausada' ? '<span class="tag">⏸️ Pausada</span>'
       : (llevo>=m.montoObjetivo ? '<span class="tag pagado">✅ Cumplida</span>' : '');
     const porMes = m.meses>0 ? m.montoObjetivo/m.meses : 0;
     const texto = usada
-      ? `Se usaron ${q(m.montoUsado||llevo)} del ahorro${m.notaUso?(' · '+esc(m.notaUso)):''}`
-      : `${q(llevo)} de ${q(m.montoObjetivo)} · ${pct}% · ${m.meses} meses (≈${q(porMes)}/mes)`;
+      ? `Se usaron ${q(m.montoUsado||llevo)} del ahorro${m.notaUso?(' · '+esc(m.notaUso)):''}${sobra>0.004?` · quedan ${q(sobra)} guardados`:''}`
+      : `${q(llevo)} de ${q(m.montoObjetivo)} · ${pct}% · ${m.meses} meses (≈${q(porMes)}/mes)${sobra>0.004?` · <b>sobran ${q(sobra)}</b>`:''}`;
     const botones = usada ? `
+          ${sobra>0.004 && destinos?`<button class="btn btn-ok btn-small" onclick="abrirPasarMeta('${m.id}')">↔️ Pasar lo que sobró (${q(sobra)})</button>`:''}
           <button class="btn btn-ghost btn-small" onclick="deshacerUsoMeta('${m.id}')">↩️ Deshacer uso</button>
           <button class="btn btn-ghost btn-small" onclick="eliminarMeta('${m.id}')" aria-label="Borrar">🗑️</button>` : `
           ${llevo>0?`<button class="btn btn-ok btn-small" onclick="abrirUsarMeta('${m.id}')">🛍️ Usar ahorro</button>`:''}
           <button class="btn ${llevo>0?'btn-ghost':'btn-ok'} btn-small" onclick="openAportarMeta('${m.id}')">💰 Aportar</button>
+          ${guardado>0.004 && destinos?`<button class="btn btn-ghost btn-small" onclick="abrirPasarMeta('${m.id}')">↔️ Pasar</button>`:''}
           <button class="btn btn-ghost btn-small" onclick="openEditarMeta('${m.id}')" aria-label="Editar">✏️</button>
           ${m.estado!=='Pausada'
             ? `<button class="btn btn-ghost btn-small" onclick="pausarMeta('${m.id}')" aria-label="Pausar">⏸️</button>`
@@ -1538,7 +1565,7 @@ function aportesMetaPorCuenta(metaId){
   return Object.entries(neto).filter(([,v])=>v>0.004).map(([id,v])=>({ id, monto:v }));
 }
 function repartoUsoMeta(metaId, monto){
-  const aportes = aportesMetaPorCuenta(metaId);
+  const aportes = saldoMetaPorCuenta(metaId);
   const total = aportes.reduce((s,a)=>s+a.monto,0);
   if(!aportes.length || total<=0) return [];
   let acumulado = 0;
@@ -1550,7 +1577,7 @@ function repartoUsoMeta(metaId, monto){
 }
 function abrirUsarMeta(metaId){
   const m = metas.find(x=>x.id===metaId); if(!m) return;
-  const llevo = calcularAvanceMeta(metaId);
+  const llevo = saldoMeta(metaId);
   document.getElementById('modalTitle').textContent = "Usar ahorro: " + m.nombre;
   document.getElementById('modalBody').innerHTML = `
     <p class="hint" style="margin:0 0 14px;">Ahorrado para esta meta: <b>${q(llevo)}</b></p>
@@ -1567,7 +1594,7 @@ function abrirUsarMeta(metaId){
 }
 function previewUsoMeta(metaId){
   const monto = parseFloat(document.getElementById('f_monto').value)||0;
-  const llevo = calcularAvanceMeta(metaId);
+  const llevo = saldoMeta(metaId);
   const reparto = repartoUsoMeta(metaId, monto);
   const el = document.getElementById('usoMetaPreview'); if(!el) return;
   if(!reparto.length){
@@ -1603,6 +1630,100 @@ function confirmarUsoMeta(metaId){
   if(cerrar){ cambios.estadoPrevio = m.estado||'Activa'; cambios.estado = 'Usada'; }
   batch.update(col('metas').doc(metaId), cambios);
   batch.commit().catch(e=>alert("No se pudo guardar: "+e.message));
+  closeModal();
+}
+// ----- Pasar dinero de una meta a otra -----
+// Por cada cuenta: un Retiro de la meta de origen y un Aporte igual a la de destino.
+// El total ahorrado y el disponible no cambian; solo cambia en qué meta está el dinero.
+function faltanteMeta(m){ return Math.max(0, Math.round((Number(m.montoObjetivo||0) - saldoMeta(m.id))*100)/100); }
+function abrirPasarMeta(origenId){
+  const o = metas.find(x=>x.id===origenId); if(!o) return;
+  const destinos = metas.filter(x=>x.id!==origenId && x.estado!=='Usada');
+  if(!destinos.length){ alert("No hay otra meta activa a donde pasar el dinero. Crea una primero."); return; }
+  const usada = o.estado==='Usada';
+  document.getElementById('modalTitle').textContent = "Pasar dinero de: " + o.nombre;
+  document.getElementById('modalBody').innerHTML = `
+    <p class="hint" style="margin:0 0 14px;">Guardado en esta meta: <b>${q(saldoMeta(origenId))}</b>${usada?' (lo que sobró después de usarla)':''}</p>
+    <div class="field"><label>¿A qué meta?</label>
+      <select id="f_destino" onchange="opcionesPasarMeta('${origenId}')">
+        ${destinos.map(d=>`<option value="${d.id}">${esc(d.nombre)} · le faltan ${q(faltanteMeta(d))}</option>`).join('')}
+      </select></div>
+    ${usada?'':`<div class="field"><label>¿Bajó de precio? Nuevo precio de "${esc(o.nombre)}" (opcional)</label>
+      <input id="f_nuevoPrecio" type="number" step="0.01" inputmode="decimal" placeholder="${q(o.montoObjetivo)}" oninput="opcionesPasarMeta('${origenId}')"></div>`}
+    <div class="field"><label>¿Cuánto pasas? (Q)</label>
+      <input id="f_monto" type="number" step="0.01" inputmode="decimal" oninput="previewPasarMeta('${origenId}')"></div>
+    <div class="actions-row" id="pasarAtajos" style="margin:-6px 0 14px;"></div>
+    <div id="pasarPreview"></div>
+    ${ayuda('El dinero se mueve de una meta a otra sin salir del ahorro: el total ahorrado y el disponible de cada uno no cambian. Se pasa de cada cuenta según lo que tenía guardado en la meta de origen. Si la meta bajó de precio, escribe el nuevo precio y te propongo pasar lo que sobra.', '¿Qué pasa al pasarlo?')}
+    <button class="btn btn-primary" onclick="confirmarPasarMeta('${origenId}')">↔️ Pasar dinero</button>`;
+  opcionesPasarMeta(origenId, true);
+  document.getElementById('modalOverlay').classList.add('active');
+}
+function opcionesPasarMeta(origenId, inicial){
+  const o = metas.find(x=>x.id===origenId); if(!o) return;
+  const d = metas.find(x=>x.id===document.getElementById('f_destino').value);
+  const guardado = saldoMeta(origenId);
+  const faltante = d ? faltanteMeta(d) : 0;
+  const npEl = document.getElementById('f_nuevoPrecio');
+  const nuevoPrecio = npEl ? parseFloat(npEl.value) : NaN;
+  const precio = !isNaN(nuevoPrecio) && nuevoPrecio>=0 ? nuevoPrecio : Number(o.montoObjetivo||0);
+  const sobra = o.estado==='Usada' ? guardado : Math.max(0, Math.round((guardado-precio)*100)/100);
+  const atajos = [];
+  if(sobra>0.004 && sobra<guardado-0.004) atajos.push([sobra, `Lo que sobra (${q(sobra)})`]);
+  if(faltante>0.004) atajos.push([Math.min(faltante, guardado), faltante<=guardado ? `Lo que le falta (${q(faltante)})` : `Lo que le falta, hasta ${q(guardado)}`]);
+  atajos.push([guardado, `Todo (${q(guardado)})`]);
+  document.getElementById('pasarAtajos').innerHTML = atajos.map(([v,t])=>
+    `<button class="btn btn-ghost btn-small" onclick="document.getElementById('f_monto').value='${v.toFixed(2)}'; previewPasarMeta('${origenId}')">${t}</button>`).join('');
+  const montoEl = document.getElementById('f_monto');
+  if(inicial || (npEl && document.activeElement===npEl) || !montoEl.value)
+    montoEl.value = (sobra>0.004 ? sobra : (faltante>0.004 ? Math.min(faltante, guardado) : guardado)).toFixed(2);
+  previewPasarMeta(origenId);
+}
+function repartoPasarMeta(origenId, monto){
+  const partes = saldoMetaPorCuenta(origenId);
+  const total = partes.reduce((t,x)=>t+x.monto,0);
+  if(!partes.length || total<=0) return [];
+  let acumulado = 0;
+  return partes.map((x,i)=>{
+    const parte = i===partes.length-1 ? Math.round((monto-acumulado)*100)/100 : Math.round(monto*x.monto/total*100)/100;
+    acumulado += parte;
+    return { id:x.id, monto:parte };
+  }).filter(x=>x.monto>0);
+}
+function previewPasarMeta(origenId){
+  const el = document.getElementById('pasarPreview'); if(!el) return;
+  const monto = parseFloat(document.getElementById('f_monto').value)||0;
+  const guardado = saldoMeta(origenId);
+  const d = metas.find(x=>x.id===document.getElementById('f_destino').value);
+  if(monto<=0){ el.innerHTML=''; return; }
+  if(monto>guardado+0.004){ el.innerHTML = `<div class="ocr-estado" style="margin:0 0 14px;"><span class="ocr-dup">Solo hay ${q(guardado)} en esta meta.</span></div>`; return; }
+  const reparto = repartoPasarMeta(origenId, monto);
+  const queda = d ? saldoMeta(d.id) + monto : 0;
+  el.innerHTML = `<div class="ocr-estado" style="margin:0 0 14px;">
+    ${reparto.map(r=>`<span class="dot" style="background:${colorCuenta(r.id)[0]}"></span> <b>${esc(nombreCuenta(r.id))}</b>: ${q(r.monto)}`).join('<br>')}
+    ${d?`<br>"${esc(d.nombre)}" quedaría con <b>${q(queda)}</b> de ${q(d.montoObjetivo)}${queda>=Number(d.montoObjetivo||0)-0.004?' ✅':''}`:''}</div>`;
+}
+function confirmarPasarMeta(origenId){
+  const o = metas.find(x=>x.id===origenId); if(!o) return;
+  const destinoId = document.getElementById('f_destino').value;
+  const d = metas.find(x=>x.id===destinoId); if(!d){ alert("Elige la meta de destino."); return; }
+  const monto = Math.round((parseFloat(document.getElementById('f_monto').value)||0)*100)/100;
+  const guardado = saldoMeta(origenId);
+  if(monto<=0){ alert("Escribe cuánto quieres pasar."); return; }
+  if(monto>guardado+0.004){ alert(`Solo hay ${q(guardado)} en "${o.nombre}".`); return; }
+  const reparto = repartoPasarMeta(origenId, monto);
+  const fecha = hoyISO(), traspasoId = 'tr' + Date.now().toString(36);
+  const batch = db.batch();
+  reparto.forEach(r=>{
+    batch.set(col('ahorros').doc(), { tipo:'Retiro', quien:r.id, monto:r.monto, fecha, categoria:'🐷 Ahorro / Inversión',
+      nota:'Pasado a ' + d.nombre, metaId:origenId, origen:'traspaso-meta', traspasoId, createdAt: FieldValue.serverTimestamp() });
+    batch.set(col('ahorros').doc(), { tipo:'Aporte', quien:r.id, monto:r.monto, fecha, categoria:'🐷 Ahorro / Inversión',
+      nota:'Viene de ' + o.nombre, metaId:destinoId, origen:'traspaso-meta', traspasoId, createdAt: FieldValue.serverTimestamp() });
+  });
+  const npEl = document.getElementById('f_nuevoPrecio');
+  const nuevoPrecio = npEl ? parseFloat(npEl.value) : NaN;
+  if(!isNaN(nuevoPrecio) && nuevoPrecio>0) batch.update(col('metas').doc(origenId), { montoObjetivo:nuevoPrecio });
+  batch.commit().catch(e=>alert("No se pudo pasar el dinero: "+e.message));
   closeModal();
 }
 function deshacerUsoMeta(metaId){
@@ -2364,30 +2485,17 @@ function tarjetaSaldoMutuoHTML(){
       <div class="sub">🐷 Ahorrado: ${q(sum('saldoAhorro'))}</div>
     </div>`;
 }
-const DIAS_SEMANA = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
 function renderComparativoMes(){
+  // Lo que cada cuenta puede gastar por día de su dinero libre, hasta fin de mes
   const hoy = new Date();
-  // Día de la semana en que más gastan (promedio de los últimos 3 meses)
-  const desde = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()-90);
-  const desdeISO = ocrISO ? ocrISO(desde) : prefijoMes(desde)+'-01';
-  const total = [0,0,0,0,0,0,0], veces = [0,0,0,0,0,0,0];
-  for(let d=new Date(desde); d<=hoy; d.setDate(d.getDate()+1)) veces[d.getDay()]++;
-  gastos.filter(g=>!esTransfer(g) && g.fecha && g.fecha>=desdeISO).forEach(g=>{
-    total[new Date(g.fecha+'T00:00:00').getDay()] += Number(g.monto||0);
-  });
-  const prom = total.map((t,i)=>veces[i] ? t/veces[i] : 0);
-  let diaTop = -1; prom.forEach((v,i)=>{ if(v>0 && (diaTop<0 || v>prom[diaTop])) diaTop=i; });
-  // Lo que les queda libre por día hasta fin de mes
-  const disponible = cuentas.reduce((t,c)=>t+calcularSaldo(c.id).disponible,0);
   const diasRestantes = new Date(hoy.getFullYear(), hoy.getMonth()+1, 0).getDate() - hoy.getDate() + 1;
-  const porDia = disponible / diasRestantes;
-  document.getElementById('factGridComparativo').innerHTML = `
-    <div class="fact-card"><span class="ic">🗓️</span>
-      <div class="val">${diaTop<0 ? '—' : DIAS_SEMANA[diaTop].charAt(0).toUpperCase()+DIAS_SEMANA[diaTop].slice(1)}</div>
-      <div class="lbl">${diaTop<0 ? 'Día en que más gastan' : `Día en que más gastan · ≈${q(prom[diaTop])} en promedio`}</div></div>
-    <div class="fact-card"><span class="ic">🧮</span>
+  const txtDias = `${diasRestantes} día${diasRestantes===1?'':'s'}`;
+  document.getElementById('factGridComparativo').innerHTML = cuentas.map(c=>{
+    const porDia = calcularSaldo(c.id).disponible / diasRestantes;
+    return `<div class="fact-card"><span class="ic"><span class="dot-lg" style="background:${colorCuenta(c.id)[0]}"></span></span>
       <div class="val num" style="${porDia<0?'color:var(--danger)':''}">${q(porDia)}</div>
-      <div class="lbl">Libre por día hasta fin de mes (${diasRestantes} día${diasRestantes===1?'':'s'})</div></div>`;
+      <div class="lbl">Libre por día · ${esc(c.nombre)}<br>hasta fin de mes (${txtDias})</div></div>`;
+  }).join('');
 }
 function renderTop3Gastos(){
   const prefijo = prefijoMes(new Date());
@@ -2417,7 +2525,7 @@ function renderFunFacts(){
   let catTop="—", catTopM=0;
   Object.entries(porCat).forEach(([c,m])=>{ if(m>catTopM){ catTopM=m; catTop=c; } });
   const totIng = ingresos.filter(i=>!esTransfer(i)).reduce((s,i)=>s+Number(i.monto||0),0);
-  const totAho = ahorros.filter(a=>a.tipo==='Aporte').reduce((s,a)=>s+Number(a.monto||0),0);
+  const totAho = ahorros.filter(a=>a.tipo==='Aporte' && a.origen!=='traspaso-meta').reduce((s,a)=>s+Number(a.monto||0),0);
   const pctAho = totIng>0 ? Math.round((totAho/totIng)*100) : 0;
   const compromisoMes = suscripciones.filter(s=>s.activa).reduce((s,x)=>s+montoMensualSub(x),0);
 
