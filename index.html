@@ -79,6 +79,16 @@
   .division-box{ display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
   .chip{ display:inline-flex; align-items:center; gap:6px; padding:7px 12px; border-radius:20px; background:var(--tag-bg); font-size:13.5px; font-weight:700; color:var(--text); cursor:pointer; }
   .chip input{ width:auto; margin:0; }
+  .division-panel{ margin-top:10px; padding:10px; border-radius:14px; background:var(--card); box-shadow:var(--shadow-sm); }
+  .div-fila{ display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+  .div-fila .chip{ flex:1; min-width:0; }
+  .div-pct{ display:inline-flex; align-items:center; gap:4px; font-weight:700; color:var(--text-soft); }
+  .field .div-pct input{ width:64px; padding:8px; text-align:right; }
+  .div-pct input:disabled{ opacity:.4; }
+  .div-monto{ min-width:78px; text-align:right; font-size:13px; color:var(--text-soft); }
+  .div-nota{ font-size:12px; font-weight:600; color:var(--text-soft); margin-top:6px; line-height:1.45; }
+  .bc-editable{ cursor:pointer; border-radius:10px; }
+  .bc-editable:active{ opacity:.7; }
 
   /* ---------- Explicaciones plegables ---------- */
   details.ayuda{ margin:-4px 0 14px; }
@@ -697,13 +707,28 @@ function participantes(valor, division){
   if(valor==='50/50') return LEGACY_PAR;
   return valor ? [valor] : [];
 }
-function parteDe(valor, division, monto, id){
+// Si un gasto dividido trae porcentajes ({id: 20, id2: 80}) se usan; si no, partes iguales.
+function tienePcts(valor, pcts, p){ return valor==='dividido' && pcts && p.every(id=>pcts[id]!=null); }
+function parteDe(valor, division, monto, id, pcts){
   const p = participantes(valor, division);
-  return p.includes(id) ? (Number(monto)||0)/p.length : 0;
+  if(!p.includes(id)) return 0;
+  const m = Number(monto)||0;
+  return tienePcts(valor, pcts, p) ? m*Number(pcts[id])/100 : m/p.length;
 }
-function etiquetaQuien(valor, division){
+// Reparte un monto en centavos exactos (la última cuenta absorbe el redondeo).
+function repartoMonto(valor, division, pcts, monto){
   const p = participantes(valor, division);
-  return p.length>1 ? p.map(nombreCuenta).join(' + ') : nombreCuenta(p[0]);
+  let acumulado = 0;
+  return p.map((id,i)=>{
+    const parte = i===p.length-1 ? Math.round((monto-acumulado)*100)/100 : Math.round(parteDe(valor, division, monto, id, pcts)*100)/100;
+    acumulado += parte;
+    return { id, monto:parte };
+  });
+}
+function etiquetaQuien(valor, division, pcts){
+  const p = participantes(valor, division);
+  if(p.length<=1) return nombreCuenta(p[0]);
+  return tienePcts(valor, pcts, p) ? p.map(id=>`${nombreCuenta(id)} ${pcts[id]}%`).join(' + ') : p.map(nombreCuenta).join(' + ');
 }
 function barBg(valor, division){
   const p = participantes(valor, division);
@@ -725,31 +750,137 @@ function ayuda(texto, titulo){
   return `<details class="ayuda"><summary>ⓘ ${titulo||'¿Cómo funciona?'}</summary><div class="ayuda-txt">${texto}</div></details>`;
 }
 
-// Selector "¿qué cuenta?" reutilizable. permitirDividir agrega "Dividir entre varias".
-function selectorQuien(id, valor, division, permitirDividir, extraOnchange){
+// Selector "¿qué cuenta?" reutilizable. permitirDividir agrega "Dividir entre varias", con porcentaje por cuenta.
+// opts.porcentajes: los guardados (al editar). opts.devolver: el registro que se está editando, para
+// calcular "según lo libre" con el dinero que había ANTES de ese gasto.
+const divCtx = {};
+function selectorQuien(id, valor, division, permitirDividir, extraOnchange, opts){
+  opts = opts || {};
   const dividir = permitirDividir && cuentas.length>1;
   const esDiv = (valor==='dividido' || valor==='50/50');
   const sel = (esDiv && dividir) ? 'dividido' : (cuentaPorId(valor) ? valor : (cuentas[0] ? cuentas[0].id : ''));
   const part = esDiv ? participantes(valor, division) : cuentas.map(c=>c.id);
+  const pcts = esDiv ? pctsEnteros(part, tienePcts(valor, opts.porcentajes, part) ? opts.porcentajes : null) : {};
+  divCtx[id] = { devolver: opts.devolver || null, iniciado: esDiv };
+  if(esDiv && dividir) setTimeout(()=>pintarDivision(id), 0);
   return `
     <select id="${id}" onchange="toggleDivision('${id}');${extraOnchange||''}">
       ${cuentas.map(c=>`<option value="${c.id}" ${c.id===sel?'selected':''}>${esc(c.nombre)}</option>`).join('')}
       ${dividir?`<option value="dividido" ${sel==='dividido'?'selected':''}>➗ Dividir entre varias</option>`:''}
     </select>
-    ${dividir?`<div class="division-box" id="${id}_div" style="display:${sel==='dividido'?'flex':'none'};">
-      ${cuentas.map(c=>`<label class="chip"><input type="checkbox" id="${id}_chk_${c.id}" ${part.includes(c.id)?'checked':''}> ${esc(c.nombre)}</label>`).join('')}
+    ${dividir?`<div class="division-panel" id="${id}_div" style="display:${sel==='dividido'?'block':'none'};">
+      ${cuentas.map(c=>`
+        <div class="div-fila">
+          <label class="chip"><input type="checkbox" id="${id}_chk_${c.id}" ${part.includes(c.id)?'checked':''} onchange="cambioCuentaDivision('${id}')">
+            <span class="dot" style="background:${colorCuenta(c.id)[0]}"></span> ${esc(c.nombre)}</label>
+          <span class="div-pct"><input type="number" inputmode="numeric" min="0" max="100" step="1" id="${id}_pct_${c.id}" value="${pcts[c.id]!=null?pcts[c.id]:''}" oninput="cambioPctDivision('${id}','${c.id}')"> %</span>
+          <span class="div-monto num" id="${id}_amt_${c.id}"></span>
+        </div>`).join('')}
+      <div class="actions-row" style="margin-top:6px;">
+        <button type="button" class="btn btn-ghost btn-small" onclick="aplicarDivision('${id}','libre')">⚖️ Según lo libre</button>
+        <button type="button" class="btn btn-ghost btn-small" onclick="aplicarDivision('${id}','iguales')">½ Partes iguales</button>
+      </div>
+      <div class="div-nota" id="${id}_nota"></div>
     </div>`:''}`;
 }
-function toggleDivision(id){
-  const box = document.getElementById(id+'_div');
-  if(box) box.style.display = document.getElementById(id).value==='dividido' ? 'flex' : 'none';
+// Porcentajes enteros que suman 100 (método del mayor residuo).
+function pctsEnteros(ids, pesos){
+  const out = {};
+  if(!ids.length) return out;
+  const w = ids.map(i=>Math.max(0, Number(pesos && pesos[i]!=null ? pesos[i] : 1)));
+  const tot = w.reduce((a,b)=>a+b,0) || ids.length;
+  const crudos = w.map(x=>(tot ? x : 1)*100/(tot||ids.length));
+  const pisos = crudos.map(Math.floor);
+  let resto = 100 - pisos.reduce((a,b)=>a+b,0);
+  crudos.map((x,i)=>({i, r:x-pisos[i]})).sort((a,b)=>b.r-a.r).forEach(({i})=>{ if(resto>0){ pisos[i]++; resto--; } });
+  ids.forEach((id,i)=>out[id]=pisos[i]);
+  return out;
 }
+// Dinero libre de cada cuenta para repartir. Si se está editando un gasto, se le devuelve
+// a cada cuenta lo que ese gasto le quitó, para usar lo que había antes del gasto.
+function libreParaDividir(selId){
+  const dev = divCtx[selId] && divCtx[selId].devolver;
+  const out = {};
+  cuentas.forEach(c=>{
+    let v = calcularSaldo(c.id).disponible;
+    if(dev) v += parteDe(dev.valor, dev.division, dev.monto, c.id, dev.porcentajes);
+    out[c.id] = Math.round(v*100)/100;
+  });
+  return out;
+}
+function cuentasMarcadas(selId){ return cuentas.filter(c=>{ const el=document.getElementById(selId+'_chk_'+c.id); return el && el.checked; }).map(c=>c.id); }
+function aplicarDivision(selId, modo){
+  const ids = cuentasMarcadas(selId);
+  const ctx = divCtx[selId] || (divCtx[selId] = {});
+  ctx.modo = modo;
+  let pcts;
+  if(modo==='libre'){
+    const libre = libreParaDividir(selId);
+    const pesos = {}; ids.forEach(i=>pesos[i]=Math.max(0, libre[i]||0));
+    pcts = pctsEnteros(ids, ids.some(i=>pesos[i]>0) ? pesos : null);
+  } else pcts = pctsEnteros(ids, null);
+  cuentas.forEach(c=>{ const el=document.getElementById(selId+'_pct_'+c.id); if(el) el.value = ids.includes(c.id) ? pcts[c.id] : ''; });
+  pintarDivision(selId);
+}
+function cambioCuentaDivision(selId){ aplicarDivision(selId, (divCtx[selId]&&divCtx[selId].modo)||'libre'); }
+function cambioPctDivision(selId, cambiado){
+  const ids = cuentasMarcadas(selId);
+  const el = document.getElementById(selId+'_pct_'+cambiado);
+  let v = Math.round(Number(el.value)); if(isNaN(v)) v = 0; v = Math.max(0, Math.min(100, v));
+  if(String(v)!==el.value && el.value!=='') el.value = v;
+  if(divCtx[selId]) divCtx[selId].modo = 'manual';
+  // Con dos cuentas, la otra se ajusta sola para sumar 100%.
+  if(ids.length===2 && ids.includes(cambiado)){
+    const otra = ids.find(i=>i!==cambiado);
+    document.getElementById(selId+'_pct_'+otra).value = 100 - v;
+  }
+  pintarDivision(selId);
+}
+function pintarDivision(selId){
+  const ids = cuentasMarcadas(selId);
+  const montoEl = document.getElementById('f_monto');
+  const monto = montoEl ? (parseFloat(montoEl.value)||0) : 0;
+  let suma = 0;
+  cuentas.forEach(c=>{
+    const pctEl = document.getElementById(selId+'_pct_'+c.id), amtEl = document.getElementById(selId+'_amt_'+c.id);
+    if(!pctEl || !amtEl) return;
+    pctEl.disabled = !ids.includes(c.id);
+    const v = ids.includes(c.id) ? Number(pctEl.value)||0 : 0;
+    suma += v;
+    amtEl.textContent = ids.includes(c.id) && monto ? q(monto*v/100) : '';
+  });
+  const nota = document.getElementById(selId+'_nota'); if(!nota) return;
+  const ctx = divCtx[selId] || {};
+  let txt = suma===100 ? '' : `<span class="ocr-dup">Suman ${suma}% — deben sumar 100%.</span><br>`;
+  if(ctx.modo==='libre'){
+    const libre = libreParaDividir(selId);
+    txt += `Según lo libre${ctx.devolver?' antes de este gasto':''}: ` + ids.map(i=>`${esc(nombreCuenta(i))} ${q(libre[i])}`).join(' · ');
+  }
+  nota.innerHTML = txt;
+}
+function toggleDivision(id){
+  const box = document.getElementById(id+'_div'); if(!box) return;
+  const on = document.getElementById(id).value==='dividido';
+  box.style.display = on ? 'block' : 'none';
+  if(on){
+    const ctx = divCtx[id] || (divCtx[id] = {});
+    if(!ctx.iniciado){ ctx.iniciado = true; aplicarDivision(id, 'libre'); }
+    else pintarDivision(id);
+  }
+}
+document.addEventListener('input', e=>{
+  if(e.target && e.target.id==='f_monto') Object.keys(divCtx).forEach(id=>{ if(document.getElementById(id+'_div')) pintarDivision(id); });
+});
 function leerQuien(id){
   const v = document.getElementById(id).value;
-  if(v!=='dividido') return { valor:v, division:null };
-  const div = cuentas.filter(c=>{ const el=document.getElementById(id+'_chk_'+c.id); return el && el.checked; }).map(c=>c.id);
+  if(v!=='dividido') return { valor:v, division:null, porcentajes:null };
+  const div = cuentasMarcadas(id);
   if(div.length<2){ alert("Para dividir, marca al menos 2 cuentas."); return null; }
-  return { valor:'dividido', division:div };
+  const porcentajes = {};
+  div.forEach(c=>{ porcentajes[c] = Math.round(Number(document.getElementById(id+'_pct_'+c).value)||0); });
+  const suma = div.reduce((t,c)=>t+porcentajes[c],0);
+  if(suma!==100){ alert(`Los porcentajes suman ${suma}%. Ajústalos para que sumen 100%.`); return null; }
+  return { valor:'dividido', division:div, porcentajes };
 }
 function selectorCuentaSimple(id, valor){
   const sel = cuentaPorId(valor) ? valor : (cuentas[0] ? cuentas[0].id : '');
@@ -957,24 +1088,26 @@ function prefijoMes(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padSta
 function esc(s){ return String(s==null?"":s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 const CAT_TRANSFER = "↔️ Transferencia";
+const CAT_AJUSTE = "⚖️ Ajuste de saldo";
 const CATEGORIAS = [
   "🏠 Vivienda / Hogar","🛒 Despensa / Súper","🚗 Transporte","🍔 Comida Fuera","💊 Salud y Cuidado Personal",
   "🎭 Diversión y Ocio","🛍️ Compras Personales","💳 Deudas / Cuotas","🔁 Suscripciones","🐶 Mascotas","🎁 Regalos",
-  "🐷 Ahorro / Inversión","⚠️ Imprevistos", CAT_TRANSFER
+  "🐷 Ahorro / Inversión","⚠️ Imprevistos", CAT_TRANSFER, CAT_AJUSTE
 ];
-const CATEGORIAS_INGRESO = ["💰 Salario","🎁 Regalo recibido","🔁 Reembolso",CAT_TRANSFER,"🤝 Préstamo recibido","💰 Cobro de préstamo dado","💵 Otro ingreso"];
+const CATEGORIAS_INGRESO = ["💰 Salario","🎁 Regalo recibido","🔁 Reembolso",CAT_TRANSFER,"🤝 Préstamo recibido","💰 Cobro de préstamo dado","💵 Otro ingreso",CAT_AJUSTE];
 const CAT_COLORS = ['#B38D97','#564256','#3581B8','#7FB8DD','#9B4351','#8FD4C1','#7A6B7A','#C9A0AC','#264653','#E6C79C','#8AA399','#D9C6DA','#5E7F9A','#A7A7AD'];
 function opcionesCategoria(lista, seleccionada){ return lista.map(c=>`<option ${c===seleccionada?'selected':''}>${c}</option>`).join(""); }
 
 // Las transferencias mueven dinero entre cuentas: cuentan para los saldos,
 // pero no como gasto/ingreso en los resúmenes de Visual.
-function esTransfer(x){ return !!x && x.categoria===CAT_TRANSFER; }
+// Transferencias y ajustes de saldo cuentan para los saldos, pero no como gasto/ingreso en los resúmenes.
+function esTransfer(x){ return !!x && (x.categoria===CAT_TRANSFER || x.categoria===CAT_AJUSTE); }
 function gastosGenerales(){
   return gastos.filter(g=>!esTransfer(g) && (ajustes.visualAlcance==='todo' || (g.capa||'Pareja')==='Pareja'));
 }
 function etiquetaGeneral(){ return ajustes.visualAlcance==='todo' ? '🌐 Todo' : '🤝 Compartido'; }
 function gastosParaVista(v){ return v==='Pareja' ? gastosGenerales() : gastos.filter(g=>!esTransfer(g)); }
-function gastoDeVista(g, v){ return v==='Pareja' ? Number(g.monto||0) : parteDe(g.quienPaga, g.division, g.monto, v); }
+function gastoDeVista(g, v){ return v==='Pareja' ? Number(g.monto||0) : parteDe(g.quienPaga, g.division, g.monto, v, g.porcentajes); }
 
 function calcularAhorro(id){
   const movs = ahorros.filter(a=>a.quien===id);
@@ -1000,11 +1133,11 @@ function subPendienteMes(s, hoy){
   return true;
 }
 function subsPendientesCuenta(id){
-  return suscripciones.filter(x=>subPendienteMes(x)).reduce((t,x)=>t+parteDe(x.quienPaga, x.division, x.monto, id),0);
+  return suscripciones.filter(x=>subPendienteMes(x)).reduce((t,x)=>t+parteDe(x.quienPaga, x.division, x.monto, id, x.porcentajes),0);
 }
 function calcularSaldo(id){
   const totalIngresos = ingresos.filter(i=>i.persona===id).reduce((s,i)=>s+Number(i.monto||0),0);
-  const totalGastos = gastos.reduce((s,g)=>s+parteDe(g.quienPaga, g.division, g.monto, id),0);
+  const totalGastos = gastos.reduce((s,g)=>s+parteDe(g.quienPaga, g.division, g.monto, id, g.porcentajes),0);
   const {aportes, retiros, saldoAhorro} = calcularAhorro(id);
   const inicial = Number(saldosIniciales[id]||0);
   const total = inicial + totalIngresos - totalGastos - aportes + retiros;
@@ -1046,13 +1179,61 @@ function contarReferencias(id){
   return n;
 }
 
+// ----- Ajustar el saldo al dinero real -----
+// Anota la diferencia como ingreso (si hay más) o gasto (si hay menos), con la categoría "Ajuste de saldo".
+function abrirAjusteSaldo(id){
+  const c = cuentaPorId(id); if(!c) return;
+  const { total, saldoAhorro } = calcularSaldo(id);
+  document.getElementById('modalTitle').textContent = "Ajustar saldo: " + c.nombre;
+  document.getElementById('modalBody').innerHTML = `
+    <p class="hint" style="margin:0 0 14px;">La app calcula que hay <b>${q(total)}</b>.</p>
+    <div class="field"><label>¿Cuánto hay de verdad? (Q)</label>
+      <input id="f_real" type="number" step="0.01" inputmode="decimal" value="${(Math.round(total*100)/100).toFixed(2)}" oninput="previewAjusteSaldo('${id}')"></div>
+    ${saldoAhorro>0.004?`<div class="field-check"><input type="checkbox" id="f_inclAhorro" onchange="previewAjusteSaldo('${id}')"><label for="f_inclAhorro">Ese monto incluye lo que tengo ahorrado (${q(saldoAhorro)})</label></div>`:''}
+    <div class="field"><label>Nota (opcional)</label><input id="f_nota" placeholder="Ej. No sé de dónde, cuadre de fin de mes"></div>
+    <div id="ajustePreview"></div>
+    ${ayuda('"Total que hay" no incluye lo que tienes en Ahorro. Si tu banco te muestra todo junto, marca la casilla para que se lo reste. La diferencia queda anotada con la fecha de hoy como "⚖️ Ajuste de saldo", que no cuenta en los gráficos ni en el Top de gastos. Si después te acuerdas de qué era, puedes editarla y ponerle la categoría correcta.', '¿Qué se anota?')}
+    <button class="btn btn-primary" onclick="guardarAjusteSaldo('${id}')">⚖️ Ajustar</button>`;
+  previewAjusteSaldo(id);
+  document.getElementById('modalOverlay').classList.add('active');
+}
+function diferenciaAjuste(id){
+  const { total, saldoAhorro } = calcularSaldo(id);
+  let real = parseFloat(document.getElementById('f_real').value);
+  if(isNaN(real)) return null;
+  const incl = document.getElementById('f_inclAhorro');
+  if(incl && incl.checked) real -= saldoAhorro;
+  return Math.round((real - total)*100)/100;
+}
+function previewAjusteSaldo(id){
+  const el = document.getElementById('ajustePreview'); if(!el) return;
+  const dif = diferenciaAjuste(id);
+  if(dif==null){ el.innerHTML=''; return; }
+  el.innerHTML = `<div class="ocr-estado" style="margin:0 0 14px;">${
+    Math.abs(dif)<0.005 ? '✓ Ya cuadra, no hay nada que ajustar.'
+    : dif>0 ? `Hay <b>${q(dif)}</b> de más → se anota como <b>ingreso</b>.`
+    : `Faltan <b>${q(-dif)}</b> → se anota como <b>gasto</b>.`}</div>`;
+}
+function guardarAjusteSaldo(id){
+  const dif = diferenciaAjuste(id);
+  if(dif==null){ alert("Escribe cuánto hay de verdad."); return; }
+  if(Math.abs(dif)<0.005){ closeModal(); return; }
+  const nota = document.getElementById('f_nota').value.trim();
+  const descripcion = 'Ajuste de saldo' + (nota?(': '+nota):'');
+  const base = { descripcion, monto: Math.abs(dif), fecha: hoyISO(), categoria: CAT_AJUSTE, origen:'ajuste', createdAt: FieldValue.serverTimestamp() };
+  (dif>0
+    ? col('ingresos').add({ ...base, persona:id })
+    : col('gastos').add({ ...base, quienPaga:id, division:null, porcentajes:null, capa:'Personal' })
+  ).catch(e=>alert("No se pudo guardar: "+e.message));
+  closeModal();
+}
 function tarjetaSaldoHTML(id){
   const {total, porPagar, porPagarSubs, disponible, saldoAhorro} = calcularSaldo(id);
   return `
     <div class="balance-card" style="${fondoCuenta(id)}">
       <div class="name">${esc(nombreCuenta(id))}</div>
-      <div class="bc-block">
-        <div class="lbl">Total que hay</div>
+      <div class="bc-block bc-editable" onclick="abrirAjusteSaldo('${id}')" title="Toca para ajustar al saldo real">
+        <div class="lbl">Total que hay ✏️</div>
         <div class="big num ${total<0?'neg':''}">${q(total)}</div>
       </div>
       <div class="bc-divider"></div>
@@ -1081,6 +1262,7 @@ function renderIngresos(){
           <div class="receipt-sub">${fmtFecha(i.fecha)} · ${esc(nombreCuenta(i.persona))} ${i.categoria?('· '+esc(i.categoria)):''}</div>
           ${i.origen==='reembolso'?'<span class="tag">↔️ Transferencia</span>':''}
           ${i.origen==='deuda'?'<span class="tag">🤝 Cobro de deuda</span>':''}
+          ${i.origen==='ajuste'?'<span class="tag">⚖️ Ajuste de saldo</span>':''}
         </div>
         <div class="receipt-amount num">+ ${q(i.monto)}</div>
       </div>
@@ -1136,7 +1318,7 @@ function renderGastos(){
   let f = gastos;
   if(currentCapaFiltro==='SinCategoria') f = gastos.filter(g=>!g.categoria);
   else if(currentCapaFiltro!=='Todos') f = gastos.filter(g=>(g.capa||'Pareja')===currentCapaFiltro);
-  if(personaGastoFiltro!=='Todos') f = f.filter(g=>parteDe(g.quienPaga, g.division, g.monto, personaGastoFiltro)>0);
+  if(personaGastoFiltro!=='Todos') f = f.filter(g=>parteDe(g.quienPaga, g.division, g.monto, personaGastoFiltro, g.porcentajes)>0);
   if(filtroCategoriaGasto) f = f.filter(g=>g.categoria===filtroCategoriaGasto);
 
   const termino = (document.getElementById('gastoBuscar')?.value||'').trim();
@@ -1160,7 +1342,7 @@ function renderGastos(){
       <div class="receipt-row">
         <div>
           <div class="receipt-title">${esc(g.descripcion)||"(sin descripción)"}</div>
-          <div class="receipt-sub">${fmtFecha(g.fecha)} · ${esc(etiquetaQuien(g.quienPaga, g.division))} ${g.categoria?('· '+esc(g.categoria)):''}</div>
+          <div class="receipt-sub">${fmtFecha(g.fecha)} · ${esc(etiquetaQuien(g.quienPaga, g.division, g.porcentajes))} ${g.categoria?('· '+esc(g.categoria)):''}</div>
           ${!g.categoria?'<span class="tag pendiente">⚠️ Sin categoría</span>':''}
           ${g.vinculoPlanId?'<span class="tag ejecutado">Desde plan</span>':''}
           ${g.origen==='plan-parcial'?'<span class="tag">🗓️ Plan (parcial)</span>':''}
@@ -1169,6 +1351,7 @@ function renderGastos(){
           ${g.origen==='deuda'?'<span class="tag">🤝 Deuda</span>':''}
           ${g.origen==='tarjeta'?'<span class="tag">💳 Tarjeta</span>':''}
           ${g.origen==='reembolso'?'<span class="tag">↔️ Transferencia</span>':''}
+          ${g.origen==='ajuste'?'<span class="tag">⚖️ Ajuste de saldo</span>':''}
         </div>
         <div class="receipt-amount num">- ${q(g.monto)}</div>
       </div>
@@ -1198,7 +1381,7 @@ function editarGasto(id){
     <div class="field"><label>Descripción</label><input id="f_desc" value="${esc(g.descripcion||'')}"></div>
     <div class="field"><label>Monto (Q)</label><input id="f_monto" type="number" step="0.01" inputmode="decimal" value="${g.monto}"></div>
     <div class="field"><label>Fecha</label><input id="f_fecha" type="date" value="${g.fecha}"></div>
-    <div class="field"><label>¿Qué cuenta paga?</label>${selectorQuien('f_quien', g.quienPaga, g.division, true, 'sugerirCapaSegunQuien()')}</div>
+    <div class="field"><label>¿Qué cuenta paga?</label>${selectorQuien('f_quien', g.quienPaga, g.division, true, 'sugerirCapaSegunQuien()', { porcentajes:g.porcentajes, devolver:{ valor:g.quienPaga, division:g.division, porcentajes:g.porcentajes, monto:g.monto } })}</div>
     ${campoCapa(g.capa)}
     <div class="field"><label>Categoría</label><select id="f_cat">${opcionesCategoria(CATEGORIAS, g.categoria)}</select></div>
     ${g.origen ? `<p class="hint">Este gasto viene de: ${esc(g.origen)}. Editarlo aquí no cambia el registro original.</p>` : ''}
@@ -1213,7 +1396,7 @@ function guardarEdicionGasto(id){
   const quien=leerQuien('f_quien'); if(!quien) return;
   const categoria=document.getElementById('f_cat').value;
   if(!monto||!fecha){ alert("Falta el monto o la fecha."); return; }
-  col('gastos').doc(id).update({ descripcion, monto, fecha, capa, quienPaga:quien.valor, division:quien.division, categoria });
+  col('gastos').doc(id).update({ descripcion, monto, fecha, capa, quienPaga:quien.valor, division:quien.division, porcentajes:quien.porcentajes, categoria });
   closeModal();
 }
 function sugerirCapaSegunQuien(){
@@ -1837,7 +2020,7 @@ function renderDeudas(){
         <div>
           <div class="receipt-title ${d.pagada?'strike':''}">${esc(titulo)}</div>
           <div class="receipt-sub">${esc(d.descripcion)||'(sin descripción)'}</div>
-          <div class="receipt-sub">Registrada: ${fmtFecha(d.fechaRegistro)} · Cuenta: ${esc(etiquetaQuien(d.quienDebe, d.division))}</div>
+          <div class="receipt-sub">Registrada: ${fmtFecha(d.fechaRegistro)} · Cuenta: ${esc(etiquetaQuien(d.quienDebe, d.division, d.porcentajes))}</div>
           <span class="tag ${d.pagada?'pagado':'pendiente'}">${tagEstado}</span>
           <span class="tag">${esNosDeben?'🤝 Nos deben':'🤝 Debemos'}</span>
         </div>
@@ -1864,7 +2047,7 @@ function formDeudaCampos(d){
     <div class="field"><label>Nombre de la persona o entidad</label><input id="f_acreedor" value="${esc(d.acreedor||'')}" placeholder="Ej. Mamá, Banco, Juan..."></div>
     <div class="field"><label>Monto (Q)</label><input id="f_monto" type="number" step="0.01" inputmode="decimal" value="${d.monto||''}" placeholder="0.00"></div>
     <div class="field"><label>Descripción</label><input id="f_desc" value="${esc(d.descripcion||'')}" placeholder="¿De qué es?"></div>
-    <div class="field"><label>¿Qué cuenta?</label>${selectorQuien('f_quien', d.quienDebe, d.division, true)}</div>
+    <div class="field"><label>¿Qué cuenta?</label>${selectorQuien('f_quien', d.quienDebe, d.division, true, '', { porcentajes:d.porcentajes })}</div>
     <div class="field"><label>Categoría</label><select id="f_cat">${opcionesCategoria(CATEGORIAS, d.categoria||'💳 Deudas / Cuotas')}</select></div>`;
 }
 function leerFormDeuda(){
@@ -1874,7 +2057,7 @@ function leerFormDeuda(){
     acreedor: document.getElementById('f_acreedor').value.trim(),
     monto: parseFloat(document.getElementById('f_monto').value),
     descripcion: document.getElementById('f_desc').value.trim(),
-    quienDebe: quien.valor, division: quien.division,
+    quienDebe: quien.valor, division: quien.division, porcentajes: quien.porcentajes,
     categoria: document.getElementById('f_cat').value
   };
   if(!d.acreedor || !d.monto){ alert("Falta el nombre o el monto."); return null; }
@@ -1914,11 +2097,9 @@ function confirmarPagoDeuda(id){
 
   if(d.tipo==='NosDeben'){
     // Un ingreso por cada cuenta que prestó (si fue dividido, se reparte).
-    const parts = participantes(d.quienDebe, d.division);
-    const base = Math.round(montoPago/parts.length*100)/100;
+    const reparto = repartoMonto(d.quienDebe, d.division, d.porcentajes, montoPago);
     const batch = db.batch(); const ids = [];
-    parts.forEach((pid, i)=>{
-      const monto = i===parts.length-1 ? Math.round((montoPago - base*(parts.length-1))*100)/100 : base;
+    reparto.forEach(({id:pid, monto})=>{
       const ref = col('ingresos').doc(); ids.push(ref.id);
       batch.set(ref, {
         fecha: hoyISO(), descripcion: 'Cobro de préstamo: ' + d.acreedor + (d.descripcion?(' - '+d.descripcion):''),
@@ -1934,7 +2115,7 @@ function confirmarPagoDeuda(id){
   } else {
     col('gastos').add({
       fecha: hoyISO(), descripcion: 'Pago deuda: ' + d.acreedor + (d.descripcion?(' - '+d.descripcion):''),
-      monto: montoPago, quienPaga: d.quienDebe, division: d.division||null,
+      monto: montoPago, quienPaga: d.quienDebe, division: d.division||null, porcentajes: d.porcentajes||null,
       categoria: d.categoria || '💳 Deudas / Cuotas', capa:'Pareja',
       origen:'deuda', deudaId: d.id, createdAt: FieldValue.serverTimestamp()
     }).then(ref=>{
@@ -1994,7 +2175,7 @@ function renderCuotas(){
       <div class="plan-head">
         <div>
           <div class="receipt-title">${esc(p.nombre)}</div>
-          <div class="receipt-sub">${esc(etiquetaQuien(p.quienPaga, p.division))} · ${nPagadas}/${pagos.length} cuotas pagadas</div>
+          <div class="receipt-sub">${esc(etiquetaQuien(p.quienPaga, p.division, p.porcentajes))} · ${nPagadas}/${pagos.length} cuotas pagadas</div>
           <div class="receipt-sub">Pagado ${q(pagado)} · Falta ${q(restante)}</div>
         </div>
         <div class="receipt-amount num">${q(p.valorTotal)}</div>
@@ -2026,7 +2207,7 @@ function togglePagoCuota(pagoId, pagado){
   if(pagado){
     col('gastos').add({
       fecha: hoyISO(), descripcion: (plan?plan.nombre:'Cuota') + ' — ' + pago.etiqueta,
-      monto: pago.monto, quienPaga: plan ? plan.quienPaga : (cuentas[0]?cuentas[0].id:''), division: plan ? (plan.division||null) : null,
+      monto: pago.monto, quienPaga: plan ? plan.quienPaga : (cuentas[0]?cuentas[0].id:''), division: plan ? (plan.division||null) : null, porcentajes: plan ? (plan.porcentajes||null) : null,
       categoria: (plan&&plan.categoria) ? plan.categoria : '💳 Deudas / Cuotas', capa:'Pareja',
       origen:'cuota', vinculoCuotaPagoId: pagoId, createdAt: FieldValue.serverTimestamp()
     }).then(ref=>{
@@ -2055,7 +2236,7 @@ function editarPlanCuotas(planId){
   document.getElementById('modalTitle').textContent = "Editar financiamiento";
   document.getElementById('modalBody').innerHTML = `
     <div class="field"><label>¿Qué es?</label><input id="f_nombre" value="${esc(p.nombre)}"></div>
-    <div class="field"><label>¿Qué cuenta paga?</label>${selectorQuien('f_quien', p.quienPaga, p.division, true)}</div>
+    <div class="field"><label>¿Qué cuenta paga?</label>${selectorQuien('f_quien', p.quienPaga, p.division, true, '', { porcentajes:p.porcentajes })}</div>
     <div class="field"><label>Categoría</label><select id="f_cat">${opcionesCategoria(CATEGORIAS, p.categoria)}</select></div>
     ${ayuda('El valor total y el número de cuotas no se pueden cambiar porque ya generaron el calendario. Si necesitas cambiarlos, borra este financiamiento y créalo de nuevo.', '¿Por qué no puedo cambiar el total?')}
     <button class="btn btn-primary" onclick="guardarEdicionPlanCuotas('${planId}')">Guardar cambios</button>`;
@@ -2066,7 +2247,7 @@ function guardarEdicionPlanCuotas(planId){
   const quien=leerQuien('f_quien'); if(!quien) return;
   const categoria=document.getElementById('f_cat').value;
   if(!nombre){ alert("Falta el nombre."); return; }
-  col('cuotas_planes').doc(planId).update({ nombre, quienPaga:quien.valor, division:quien.division, categoria });
+  col('cuotas_planes').doc(planId).update({ nombre, quienPaga:quien.valor, division:quien.division, porcentajes:quien.porcentajes, categoria });
   closeModal();
 }
 
@@ -2085,7 +2266,7 @@ function fechaPagoDe(fechaISO){
 }
 function calcularTarjetaPendienteSinPlan(id){
   return tarjetaGastos.filter(g=>!g.pagado && !g.vinculoPlanId)
-    .reduce((s,g)=>s+parteDe(g.quien, g.division, g.monto, id),0);
+    .reduce((s,g)=>s+parteDe(g.quien, g.division, g.monto, id, g.porcentajes),0);
 }
 function renderTarjeta(){
   const activos = tarjetaGastos.filter(g=>!g.pagado);
@@ -2136,7 +2317,7 @@ function renderTarjeta(){
           <div class="receipt-row">
             <div>
               <div class="receipt-title">${esc(g.descripcion)||'(sin descripción)'}</div>
-              <div class="receipt-sub">${fmtFecha(g.fecha)} · ${esc(etiquetaQuien(g.quien, g.division))} ${g.categoria?('· '+esc(g.categoria)):''}</div>
+              <div class="receipt-sub">${fmtFecha(g.fecha)} · ${esc(etiquetaQuien(g.quien, g.division, g.porcentajes))} ${g.categoria?('· '+esc(g.categoria)):''}</div>
               ${g.pendienteProceso?'<span class="tag pendiente">🕓 Aún no procesa</span>':''}
               ${g.vinculoPlanId?'<span class="tag ejecutado">🗓️ Cumple un plan</span>':''}
             </div>
@@ -2177,7 +2358,7 @@ function renderTarjeta(){
       <div class="pagos-list" id="pagos-hist-${p.id}">
         ${(p.items||[]).map(it=>`
           <div class="pago-row">
-            <div class="pago-left"><span>${esc(it.descripcion)} · ${esc(etiquetaQuien(it.quien, it.division))}</span></div>
+            <div class="pago-left"><span>${esc(it.descripcion)} · ${esc(etiquetaQuien(it.quien, it.division, it.porcentajes))}</span></div>
             <span>${q(it.monto)}</span>
           </div>`).join("")}
       </div>
@@ -2193,8 +2374,7 @@ function debitarPeriodoTarjeta(label){
 
   const montos = {};
   items.forEach(g=>{
-    const p = participantes(g.quien, g.division);
-    p.forEach(id=>{ montos[id] = (montos[id]||0) + Number(g.monto||0)/p.length; });
+    participantes(g.quien, g.division).forEach(id=>{ montos[id] = (montos[id]||0) + parteDe(g.quien, g.division, g.monto, id, g.porcentajes); });
   });
   Object.keys(montos).forEach(k=>montos[k]=Math.round(montos[k]*100)/100);
 
@@ -2211,7 +2391,7 @@ function debitarPeriodoTarjeta(label){
   const pagoRef = col('tarjeta_pagos').doc();
   batch.set(pagoRef, {
     periodo: label, fechaPago: hoyISO(), total, montos,
-    items: items.map(it=>({ descripcion: it.descripcion||'', monto: it.monto, quien: it.quien, division: it.division||null, categoria: it.categoria||'' })),
+    items: items.map(it=>({ descripcion: it.descripcion||'', monto: it.monto, quien: it.quien, division: it.division||null, porcentajes: it.porcentajes||null, categoria: it.categoria||'' })),
     createdAt: FieldValue.serverTimestamp()
   });
   items.forEach(g => batch.update(col('tarjeta_gastos').doc(g.id), { pagado:true, pagoId: pagoRef.id }));
@@ -2225,7 +2405,7 @@ function editarTarjetaGasto(id){
     <div class="field"><label>Descripción</label><input id="f_desc" value="${esc(g.descripcion||'')}"></div>
     <div class="field"><label>Monto (Q)</label><input id="f_monto" type="number" step="0.01" inputmode="decimal" value="${g.monto}"></div>
     <div class="field"><label>Fecha</label><input id="f_fecha" type="date" value="${g.fecha}"></div>
-    <div class="field"><label>¿A qué cuenta le toca pagarla?</label>${selectorQuien('f_quien', g.quien, g.division, true)}</div>
+    <div class="field"><label>¿A qué cuenta le toca pagarla?</label>${selectorQuien('f_quien', g.quien, g.division, true, '', { porcentajes:g.porcentajes })}</div>
     <div class="field"><label>Categoría</label><select id="f_cat">${opcionesCategoria(CATEGORIAS, g.categoria)}</select></div>
     <button class="btn btn-primary" onclick="guardarEdicionTarjetaGasto('${id}')">Guardar cambios</button>`;
   document.getElementById('modalOverlay').classList.add('active');
@@ -2237,13 +2417,13 @@ function guardarEdicionTarjetaGasto(id){
   const quien=leerQuien('f_quien'); if(!quien) return;
   const categoria=document.getElementById('f_cat').value;
   if(!monto||!fecha){ alert("Falta el monto o la fecha."); return; }
-  col('tarjeta_gastos').doc(id).update({ descripcion, monto, fecha, quien:quien.valor, division:quien.division, categoria });
+  col('tarjeta_gastos').doc(id).update({ descripcion, monto, fecha, quien:quien.valor, division:quien.division, porcentajes:quien.porcentajes, categoria });
   closeModal();
 }
 
 // ================= SUSCRIPCIONES =================
 function montoMensualSub(s){ const m = Number(s.monto||0); return s.frecuencia==='Anual' ? m/12 : m; }
-function montoMensualSubCuenta(s, id){ return parteDe(s.quienPaga, s.division, montoMensualSub(s), id); }
+function montoMensualSubCuenta(s, id){ return parteDe(s.quienPaga, s.division, montoMensualSub(s), id, s.porcentajes); }
 function proximoCobroDate(s){
   if(!s.activa) return null;
   const hoy = new Date(), dia = Number(s.diaCobro||1);
@@ -2293,7 +2473,7 @@ function renderSuscripciones(){
       <div class="receipt-row">
         <div>
           <div class="receipt-title ${s.activa?'':'strike'}">${esc(s.servicio)}</div>
-          <div class="receipt-sub">${esc(s.frecuencia)} · día ${s.diaCobro} · ${esc(etiquetaQuien(s.quienPaga, s.division))}</div>
+          <div class="receipt-sub">${esc(s.frecuencia)} · día ${s.diaCobro} · ${esc(etiquetaQuien(s.quienPaga, s.division, s.porcentajes))}</div>
           <div class="receipt-sub">Próximo cobro: ${proximoCobro(s)}</div>
           <span class="tag ${s.activa?'pagado':''}">${s.activa?'🟢 Activa':'⚪ Inactiva'}</span>
           ${!s.activa ? '' : debitadaEsteMes ? '<span class="tag pagado">✅ Debitada este mes</span>'
@@ -2321,7 +2501,7 @@ function formSubCampos(s){
         <option ${s.frecuencia==='Anual'?'selected':''}>Anual</option>
       </select></div>
     <div class="field"><label>Día de cobro</label><input id="f_dia" type="number" min="1" max="31" value="${s.diaCobro||1}"></div>
-    <div class="field"><label>¿Qué cuenta la paga?</label>${selectorQuien('f_quien', s.quienPaga, s.division, true)}</div>
+    <div class="field"><label>¿Qué cuenta la paga?</label>${selectorQuien('f_quien', s.quienPaga, s.division, true, '', { porcentajes:s.porcentajes, devolver: s.id && subPendienteMes(s) ? { valor:s.quienPaga, division:s.division, porcentajes:s.porcentajes, monto:s.monto } : null })}</div>
     <div class="field"><label>Categoría</label><select id="f_cat">${opcionesCategoria(CATEGORIAS, s.categoria||'🔁 Suscripciones')}</select></div>`;
 }
 function leerFormSub(){
@@ -2331,7 +2511,7 @@ function leerFormSub(){
     monto: parseFloat(document.getElementById('f_monto').value),
     frecuencia: document.getElementById('f_frecuencia').value,
     diaCobro: parseInt(document.getElementById('f_dia').value)||1,
-    quienPaga: quien.valor, division: quien.division,
+    quienPaga: quien.valor, division: quien.division, porcentajes: quien.porcentajes,
     categoria: document.getElementById('f_cat').value
   };
   if(!d.servicio || !d.monto){ alert("Falta el servicio o el monto."); return null; }
@@ -2354,7 +2534,7 @@ function debitarSub(id){
   if(!confirm(`¿Debitar ${q(s.monto)} de "${s.servicio}"? Se crea un gasto real por ese monto.`)) return;
   col('gastos').add({
     fecha: hoyISO(), descripcion: s.servicio + ' (suscripción)', monto: s.monto,
-    quienPaga: s.quienPaga, division: s.division||null, categoria: s.categoria || "🔁 Suscripciones", capa:'Pareja',
+    quienPaga: s.quienPaga, division: s.division||null, porcentajes: s.porcentajes||null, categoria: s.categoria || "🔁 Suscripciones", capa:'Pareja',
     origen:'suscripcion', subscripcionId: s.id, createdAt: FieldValue.serverTimestamp()
   }).then(()=>{ col('suscripciones').doc(id).update({ ultimoDebito: hoyISO() }); });
 }
@@ -2420,7 +2600,7 @@ function guardarReembolso(){
   const t = textosTransfer(d);
   const gastoRef = col('gastos').doc(), ingresoRef = col('ingresos').doc(), rRef = col('reembolsos').doc();
   const batch = db.batch();
-  batch.set(gastoRef, { fecha:d.fecha, descripcion:t.gasto, monto:d.monto, quienPaga:d.desde, division:null,
+  batch.set(gastoRef, { fecha:d.fecha, descripcion:t.gasto, monto:d.monto, quienPaga:d.desde, division:null, porcentajes:null,
     categoria:d.categoria, capa:'Pareja', origen:'reembolso', reembolsoId:rRef.id, createdAt: FieldValue.serverTimestamp() });
   batch.set(ingresoRef, { fecha:d.fecha, descripcion:t.ingreso, monto:d.monto, persona:d.hacia,
     categoria:t.catIngreso, origen:'reembolso', reembolsoId:rRef.id, createdAt: FieldValue.serverTimestamp() });
@@ -2450,7 +2630,7 @@ function guardarEdicionReembolso(id){
   const t = textosTransfer(d);
   const batch = db.batch();
   batch.update(col('reembolsos').doc(id), { fecha:d.fecha, pagador:d.desde, beneficiario:d.hacia, monto:d.monto, categoria:d.categoria, motivo:d.motivo });
-  if(r.gastoId) batch.update(col('gastos').doc(r.gastoId), { fecha:d.fecha, monto:d.monto, quienPaga:d.desde, division:null, categoria:d.categoria, descripcion:t.gasto });
+  if(r.gastoId) batch.update(col('gastos').doc(r.gastoId), { fecha:d.fecha, monto:d.monto, quienPaga:d.desde, division:null, porcentajes:null, categoria:d.categoria, descripcion:t.gasto });
   if(r.ingresoId) batch.update(col('ingresos').doc(r.ingresoId), { fecha:d.fecha, monto:d.monto, persona:d.hacia, categoria:t.catIngreso, descripcion:t.ingreso });
   batch.commit().then(closeModal).catch(e=>alert("No se pudo guardar: "+e.message));
 }
@@ -2532,7 +2712,7 @@ function renderTop3Gastos(){
       <div class="receipt-row">
         <div>
           <div class="receipt-title">${medallas[i]||`<span style="display:inline-block; min-width:22px; color:var(--text-soft);">${i+1}.</span>`} ${esc(g.descripcion)||'(sin descripción)'}</div>
-          <div class="receipt-sub">${fmtFecha(g.fecha)} · ${esc(etiquetaQuien(g.quienPaga, g.division))} ${g.categoria?('· '+esc(g.categoria)):''}</div>
+          <div class="receipt-sub">${fmtFecha(g.fecha)} · ${esc(etiquetaQuien(g.quienPaga, g.division, g.porcentajes))} ${g.categoria?('· '+esc(g.categoria)):''}</div>
         </div>
         <div class="receipt-amount num">${q(g.monto)}</div>
       </div>
@@ -2560,7 +2740,7 @@ function renderFunFacts(){
   if(cuentas.length>1){
     const gTodos = gastos.filter(g=>!esTransfer(g) && g.fecha && g.fecha.startsWith(prefijo));
     html += cuentas.map(c=>{
-      const t = gTodos.reduce((s,g)=>s+parteDe(g.quienPaga, g.division, g.monto, c.id),0);
+      const t = gTodos.reduce((s,g)=>s+parteDe(g.quienPaga, g.division, g.monto, c.id, g.porcentajes),0);
       return `<div class="fact-card"><span class="ic"><span class="dot-lg" style="background:${colorCuenta(c.id)[0]}"></span></span>
         <div class="val num">${q(t/diasMes)}</div><div class="lbl">Promedio diario · ${esc(c.nombre)}</div></div>`;
     }).join('');
@@ -2886,7 +3066,7 @@ function guardarGasto(){
   const quien=leerQuien('f_quien'); if(!quien) return;
   const categoria=document.getElementById('f_cat').value;
   if(!monto||!fecha){ alert("Falta el monto o la fecha."); return; }
-  col('gastos').add({ descripcion, monto, fecha, quienPaga:quien.valor, division:quien.division, categoria, capa,
+  col('gastos').add({ descripcion, monto, fecha, quienPaga:quien.valor, division:quien.division, porcentajes:quien.porcentajes, categoria, capa,
     createdAt: FieldValue.serverTimestamp() });
   recordarCuenta(quien.valor);
   closeModal();
@@ -2931,7 +3111,7 @@ function guardarPlanCuotas(){
 
   col('cuotas_planes').add({
     nombre, valorTotal, nCuotas, frecuencia, mesInicio, anioInicio,
-    quienPaga:quien.valor, division:quien.division, montoCuota, categoria,
+    quienPaga:quien.valor, division:quien.division, porcentajes:quien.porcentajes, montoCuota, categoria,
     createdAt: FieldValue.serverTimestamp()
   }).then(ref=>{
     const batch = db.batch();
@@ -2961,7 +3141,7 @@ function guardarTarjetaGasto(){
   const categoria=document.getElementById('f_cat').value;
   const planId=document.getElementById('f_plan').value || null;
   if(!monto||!fecha){ alert("Falta el monto o la fecha."); return; }
-  col('tarjeta_gastos').add({ descripcion, monto, fecha, quien:quien.valor, division:quien.division, categoria, vinculoPlanId: planId,
+  col('tarjeta_gastos').add({ descripcion, monto, fecha, quien:quien.valor, division:quien.division, porcentajes:quien.porcentajes, categoria, vinculoPlanId: planId,
     createdAt: FieldValue.serverTimestamp() }).then(()=>{ if(planId) aplicarVinculoPlanDesdeTarjeta(planId, monto); });
   recordarCuenta(quien.valor);
   closeModal();
