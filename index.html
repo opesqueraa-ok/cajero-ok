@@ -1023,21 +1023,21 @@ function startListeners(){
   const escuchar = (nombre, orden, dir, set) => {
     let ref = col(nombre);
     if(orden) ref = ref.orderBy(orden, dir||'desc');
-    unsubs.push(ref.onSnapshot(snap=>{ set(snap.docs.map(d=>({id:d.id, ...d.data()}))); renderAll(); },
+    unsubs.push(ref.onSnapshot(snap=>{ set(snap.docs.map(d=>({id:d.id, ...d.data({serverTimestamps:'estimate'})}))); renderAll(); },
       err=>console.warn('Error leyendo '+nombre, err)));
   };
-  escuchar('ingresos','fecha','desc', v=>ingresos=v);
-  escuchar('gastos','fecha','desc', v=>gastos=v);
+  escuchar('ingresos','fecha','desc', v=>ingresos=ordenarRecientes(v));
+  escuchar('gastos','fecha','desc', v=>gastos=ordenarRecientes(v));
   escuchar('planificacion','anio','desc', v=>planes=v);
-  escuchar('ahorros','fecha','desc', v=>ahorros=v);
+  escuchar('ahorros','fecha','desc', v=>ahorros=ordenarRecientes(v));
   escuchar('metas','createdAt','desc', v=>metas=v);
   escuchar('deudas','createdAt','desc', v=>deudas=v);
   escuchar('cuotas_planes','createdAt','desc', v=>cuotasPlanes=v);
   escuchar('cuotas_pagos','numero','asc', v=>cuotasPagos=v);
-  escuchar('tarjeta_gastos','fecha','desc', v=>tarjetaGastos=v);
+  escuchar('tarjeta_gastos','fecha','desc', v=>tarjetaGastos=ordenarRecientes(v));
   escuchar('tarjeta_pagos','fechaPago','desc', v=>tarjetaPagos=v);
   escuchar('suscripciones','createdAt','desc', v=>suscripciones=v);
-  escuchar('reembolsos','fecha','desc', v=>reembolsos=v);
+  escuchar('reembolsos','fecha','desc', v=>reembolsos=ordenarRecientes(v));
 
   unsubs.push(col('config').doc('saldoInicial').onSnapshot(doc=>{
     saldosIniciales = doc.exists ? doc.data() : {};
@@ -1083,6 +1083,30 @@ function fmtFecha(f){ if(!f) return ""; const d=new Date(f+"T00:00:00"); return 
 function hoyISO(){
   const d = new Date();
   return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0');
+}
+// Momento en que se anotó un registro (createdAt). Sin dato → 0 (queda al final de su día).
+function msCreado(x){
+  const c = x && x.createdAt;
+  if(!c) return 0;
+  if(typeof c==='number') return c;
+  if(typeof c.toMillis==='function') return c.toMillis();
+  if(c.seconds!=null) return c.seconds*1000;
+  const t = new Date(c).getTime(); return isNaN(t) ? 0 : t;
+}
+function ordenarRecientes(lista){
+  return lista.slice().sort((a,b)=>{
+    const fa=a.fecha||'', fb=b.fecha||'';
+    if(fa!==fb) return fa<fb ? 1 : -1;
+    return msCreado(b) - msCreado(a);
+  });
+}
+// "12 oct 2026 · 5:04 p. m." — la hora solo se muestra si se anotó el mismo día de la fecha del registro.
+function fechaHora(x){
+  const base = fmtFecha(x.fecha);
+  const ms = msCreado(x); if(!ms) return base;
+  const d = new Date(ms);
+  if(ocrISO(d)!==x.fecha) return base;
+  return base + ' · ' + d.toLocaleTimeString('es-GT',{hour:'numeric', minute:'2-digit'});
 }
 function prefijoMes(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,'0'); }
 function esc(s){ return String(s==null?"":s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -1259,7 +1283,7 @@ function renderIngresos(){
       <div class="receipt-row">
         <div>
           <div class="receipt-title">${esc(i.descripcion)||"(sin descripción)"}</div>
-          <div class="receipt-sub">${fmtFecha(i.fecha)} · ${esc(nombreCuenta(i.persona))} ${i.categoria?('· '+esc(i.categoria)):''}</div>
+          <div class="receipt-sub">${fechaHora(i)} · ${esc(nombreCuenta(i.persona))} ${i.categoria?('· '+esc(i.categoria)):''}</div>
           ${i.origen==='reembolso'?'<span class="tag">↔️ Transferencia</span>':''}
           ${i.origen==='deuda'?'<span class="tag">🤝 Cobro de deuda</span>':''}
           ${i.origen==='ajuste'?'<span class="tag">⚖️ Ajuste de saldo</span>':''}
@@ -1342,7 +1366,7 @@ function renderGastos(){
       <div class="receipt-row">
         <div>
           <div class="receipt-title">${esc(g.descripcion)||"(sin descripción)"}</div>
-          <div class="receipt-sub">${fmtFecha(g.fecha)} · ${esc(etiquetaQuien(g.quienPaga, g.division, g.porcentajes))} ${g.categoria?('· '+esc(g.categoria)):''}</div>
+          <div class="receipt-sub">${fechaHora(g)} · ${esc(etiquetaQuien(g.quienPaga, g.division, g.porcentajes))} ${g.categoria?('· '+esc(g.categoria)):''}</div>
           ${!g.categoria?'<span class="tag pendiente">⚠️ Sin categoría</span>':''}
           ${g.vinculoPlanId?'<span class="tag ejecutado">Desde plan</span>':''}
           ${g.origen==='plan-parcial'?'<span class="tag">🗓️ Plan (parcial)</span>':''}
@@ -1627,7 +1651,7 @@ function renderAhorro(){
       <div class="receipt-row">
         <div>
           <div class="receipt-title">${esc(etiquetaTipo)}${a.nota?(' · '+esc(a.nota)):''}</div>
-          <div class="receipt-sub">${fmtFecha(a.fecha)} · ${esc(nombreCuenta(a.quien))} ${a.categoria?('· '+esc(a.categoria)):''}${meta?(' · Meta: '+esc(meta.nombre)):''}</div>
+          <div class="receipt-sub">${fechaHora(a)} · ${esc(nombreCuenta(a.quien))} ${a.categoria?('· '+esc(a.categoria)):''}${meta?(' · Meta: '+esc(meta.nombre)):''}</div>
           ${a.tipo==='GastoAhorro'?'<span class="tag">No toca el disponible</span>':''}
           ${a.origen==='uso-meta'?'<span class="tag pagado">🛍️ Uso de meta</span>':''}
           ${a.origen==='traspaso-meta'?'<span class="tag">↔️ Entre metas</span>':''}
@@ -2317,7 +2341,7 @@ function renderTarjeta(){
           <div class="receipt-row">
             <div>
               <div class="receipt-title">${esc(g.descripcion)||'(sin descripción)'}</div>
-              <div class="receipt-sub">${fmtFecha(g.fecha)} · ${esc(etiquetaQuien(g.quien, g.division, g.porcentajes))} ${g.categoria?('· '+esc(g.categoria)):''}</div>
+              <div class="receipt-sub">${fechaHora(g)} · ${esc(etiquetaQuien(g.quien, g.division, g.porcentajes))} ${g.categoria?('· '+esc(g.categoria)):''}</div>
               ${g.pendienteProceso?'<span class="tag pendiente">🕓 Aún no procesa</span>':''}
               ${g.vinculoPlanId?'<span class="tag ejecutado">🗓️ Cumple un plan</span>':''}
             </div>
@@ -2553,7 +2577,7 @@ function renderReembolsos(){
       <div class="receipt-row">
         <div>
           <div class="receipt-title">${esc(nombreCuenta(r.pagador))} → ${esc(nombreCuenta(r.beneficiario))}</div>
-          <div class="receipt-sub">${fmtFecha(r.fecha)}${r.motivo?(' · '+esc(r.motivo)):''}${r.categoria?(' · '+esc(r.categoria)):''}</div>
+          <div class="receipt-sub">${fechaHora(r)}${r.motivo?(' · '+esc(r.motivo)):''}${r.categoria?(' · '+esc(r.categoria)):''}</div>
         </div>
         <div class="receipt-amount num">${q(r.monto)}</div>
       </div>
