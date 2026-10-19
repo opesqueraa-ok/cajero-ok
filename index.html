@@ -88,6 +88,26 @@
   .div-monto{ min-width:78px; text-align:right; font-size:13px; color:var(--text-soft); }
   .div-nota{ font-size:12px; font-weight:600; color:var(--text-soft); margin-top:6px; line-height:1.45; }
   .bc-editable{ cursor:pointer; border-radius:10px; }
+  .hc-gasto{ border:1.5px solid var(--line); border-radius:12px; background:var(--card); margin-bottom:8px; }
+  .hc-gasto.on{ border-color:var(--brand); }
+  .hc-fila{ display:flex; align-items:center; gap:10px; padding:10px 12px; cursor:pointer; font-size:14px; }
+  .hc-fila input{ width:auto; margin:0; }
+  .hc-txt{ flex:1; min-width:0; display:flex; flex-direction:column; }
+  .hc-txt b{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .hc-txt small{ color:var(--text-soft); font-weight:600; font-size:12px; margin-top:2px; }
+  .hc-reparto{ display:flex; flex-wrap:wrap; align-items:center; gap:4px 12px; padding:0 12px 10px 36px; font-size:12px; font-weight:700; color:var(--text-soft); }
+  .hc-reparto span{ display:inline-flex; align-items:center; gap:5px; }
+  .hc-propio{ margin-left:auto; }
+  .field .hc-propio input{ width:58px; padding:5px 6px; font-size:16px; text-align:right; }
+  .hc-propio .btn{ padding:4px 8px; }
+  .hc-resumen{ background:var(--card); border-radius:16px; padding:14px; box-shadow:var(--shadow-md); }
+  .hc-res-titulo{ font-weight:700; font-size:15px; margin-bottom:8px; }
+  .hc-res-fila{ display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 10px; padding:8px 0; border-bottom:1px solid var(--line); font-size:13px; }
+  .hc-res-nombre{ font-weight:700; display:inline-flex; align-items:center; gap:6px; min-width:90px; }
+  .hc-res-det{ color:var(--text-soft); font-weight:600; flex:1; }
+  .hc-res-libre{ font-weight:600; color:var(--text-soft); width:100%; padding-left:16px; }
+  .hc-res-libre b{ color:var(--text); }
+  .hc-res-final{ margin-top:10px; font-size:14.5px; line-height:1.6; }
   .bc-editable:active{ opacity:.7; }
 
   /* ---------- Explicaciones plegables ---------- */
@@ -392,6 +412,8 @@
       <div id="mov-ingresos" class="mov-panel"><div id="ingresosList"></div></div>
 
       <div id="mov-gastos" class="mov-panel" style="display:none;">
+        <button class="btn btn-ghost" style="width:100%; margin-bottom:12px;" onclick="abrirHacerCuentas()">🧮 Hacer cuentas</button>
+        <div id="cuentasPendientesBanner"></div>
         <div class="field" style="margin-bottom:10px;">
           <input id="gastoBuscar" type="text" placeholder="🔍 Buscar por nombre o monto (ej. 182)" oninput="renderGastos()">
         </div>
@@ -430,6 +452,7 @@
           un gasto de la otra cuenta, elige la categoría de ese gasto.
         </div></details>
         <div id="reembolsosList"></div>
+        <div id="cuentasParejaList"></div>
       </div>
     </section>
 
@@ -909,7 +932,7 @@ function detenerListeners(){
   unsubs = []; yaEscuchando = false;
   ingresos=[]; gastos=[]; planes=[]; ahorros=[]; metas=[];
   deudas=[]; cuotasPlanes=[]; cuotasPagos=[]; tarjetaGastos=[]; suscripciones=[];
-  reembolsos=[]; tarjetaPagos=[]; saldosIniciales={};
+  reembolsos=[]; tarjetaPagos=[]; liquidaciones=[]; saldosIniciales={};
 }
 
 function entrarAlApp(){
@@ -1014,7 +1037,7 @@ function quitarFiltroCategoriaGasto(){
 // ================= ESTADO =================
 let ingresos=[], gastos=[], planes=[], ahorros=[], metas=[];
 let deudas=[], cuotasPlanes=[], cuotasPagos=[], tarjetaGastos=[], suscripciones=[];
-let reembolsos=[], tarjetaPagos=[];
+let reembolsos=[], tarjetaPagos=[], liquidaciones=[];
 let saldosIniciales = {};
 
 function startListeners(){
@@ -1038,6 +1061,7 @@ function startListeners(){
   escuchar('tarjeta_pagos','fechaPago','desc', v=>tarjetaPagos=v);
   escuchar('suscripciones','createdAt','desc', v=>suscripciones=v);
   escuchar('reembolsos','fecha','desc', v=>reembolsos=ordenarRecientes(v));
+  escuchar('liquidaciones','createdAt','desc', v=>liquidaciones=v);
 
   unsubs.push(col('config').doc('saldoInicial').onSnapshot(doc=>{
     saldosIniciales = doc.exists ? doc.data() : {};
@@ -1074,6 +1098,7 @@ function renderAll(){
   renderTarjeta();
   renderSuscripciones();
   renderReembolsos();
+  renderCuentasPareja();
   if(currentView==='visual') renderVisual();
 }
 
@@ -1170,7 +1195,10 @@ function calcularSaldo(id){
     .reduce((s,p)=>s+Number(p.monto||0),0);
   const porPagarSubs = subsPendientesCuenta(id);
   const porPagar = porPagarPlanes + porPagarSubs;
-  return { total, porPagar, porPagarPlanes, porPagarSubs, disponible: total - porPagar, saldoAhorro };
+  // Cuentas pendientes entre ustedes: los gastos ya están repartidos, pero el dinero aún no se movió.
+  const { debe:debePareja, cobra:cobraPareja } = pendientePareja(id);
+  return { total: total + debePareja - cobraPareja, porPagar, porPagarPlanes, porPagarSubs,
+    disponible: total - porPagar, saldoAhorro, debePareja, cobraPareja };
 }
 // Dinero que todavía está guardado en una meta (aportes - retiros - lo que ya se usó)
 function saldoMetaPorCuenta(metaId){
@@ -1252,7 +1280,7 @@ function guardarAjusteSaldo(id){
   closeModal();
 }
 function tarjetaSaldoHTML(id){
-  const {total, porPagar, porPagarSubs, disponible, saldoAhorro} = calcularSaldo(id);
+  const {total, porPagar, porPagarSubs, disponible, saldoAhorro, debePareja, cobraPareja} = calcularSaldo(id);
   return `
     <div class="balance-card" style="${fondoCuenta(id)}">
       <div class="name">${esc(nombreCuenta(id))}</div>
@@ -1268,6 +1296,8 @@ function tarjetaSaldoHTML(id){
       <div class="sub">📌 Planificado: ${q(porPagar)}</div>
       ${porPagarSubs>0.004?`<div class="sub" style="padding-left:18px;">incluye 🔁 ${q(porPagarSubs)} de subs</div>`:''}
       <div class="sub">🐷 Ahorrado: ${q(saldoAhorro)}</div>
+      ${debePareja>0.004?`<div class="sub">🧮 Le debes de cuentas: ${q(debePareja)}</div>`:''}
+      ${cobraPareja>0.004?`<div class="sub">🧮 Te deben de cuentas: ${q(cobraPareja)}</div>`:''}
     </div>`;
 }
 
@@ -1376,6 +1406,7 @@ function renderGastos(){
           ${g.origen==='tarjeta'?'<span class="tag">💳 Tarjeta</span>':''}
           ${g.origen==='reembolso'?'<span class="tag">↔️ Transferencia</span>':''}
           ${g.origen==='ajuste'?'<span class="tag">⚖️ Ajuste de saldo</span>':''}
+          ${g.liquidacionId?'<span class="tag">🧮 En cuentas</span>':''}
         </div>
         <div class="receipt-amount num">- ${q(g.monto)}</div>
       </div>
@@ -3573,6 +3604,245 @@ function aplicarMovimientoOcr(i){
       ${dup?'<br><span class="ocr-dup">Ojo: parece que este movimiento ya está anotado.</span>':''}
       ${movs.length>1?`<br><button class="btn btn-ghost btn-small" style="margin-top:8px;" onclick="renderOcrLista()">Elegir otro movimiento</button>`:''}
     </div>`;
+}
+
+// ================= HACER CUENTAS (ponerse a mano) =================
+// Se eligen varios gastos que pagó una sola cuenta y se reparten entre varias.
+// Antes de aplicar se ve cómo queda el libre de cada uno.
+// Al aplicar, cada gasto pasa a "dividido" con sus porcentajes. Si el que debe todavía no paga,
+// la cuenta queda "pendiente": el Total que hay de cada uno se ajusta para seguir coincidiendo con el banco.
+let hc = null; // estado de la herramienta mientras está abierta
+
+function gastosParaCuentas(){
+  const desde = new Date(); desde.setDate(desde.getDate()-60);
+  const desdeISO = ocrISO(desde);
+  return gastos.filter(g=>!esTransfer(g) && !g.liquidacionId && g.fecha>=desdeISO
+    && participantes(g.quienPaga, g.division).length===1 && cuentaPorId(g.quienPaga));
+}
+function abrirHacerCuentas(){
+  if(cuentas.length<2){ alert("Necesitas al menos 2 cuentas para hacer cuentas."); return; }
+  hc = { part: cuentas.map(c=>c.id), modo:'libre', global:{}, sel:{}, propio:{} };
+  hcRecalcularGlobal();
+  document.getElementById('modalTitle').textContent = "🧮 Hacer cuentas";
+  renderHacerCuentas();
+  document.getElementById('modalOverlay').classList.add('active');
+}
+function hcSeleccionados(){ return gastos.filter(g=>hc.sel[g.id]); }
+// Libre de cada cuenta ANTES de los gastos elegidos (se le devuelve lo que esos gastos le quitaron).
+function hcLibreBase(){
+  const out = {};
+  cuentas.forEach(c=>{
+    let v = calcularSaldo(c.id).disponible;
+    hcSeleccionados().forEach(g=>{ v += parteDe(g.quienPaga, g.division, g.monto, c.id, g.porcentajes); });
+    out[c.id] = Math.round(v*100)/100;
+  });
+  return out;
+}
+function hcRecalcularGlobal(){
+  if(hc.modo==='libre'){
+    const base = hcLibreBase(), pesos = {};
+    hc.part.forEach(i=>pesos[i]=Math.max(0, base[i]||0));
+    hc.global = pctsEnteros(hc.part, hc.part.some(i=>pesos[i]>0) ? pesos : null);
+  } else if(hc.modo==='iguales'){
+    hc.global = pctsEnteros(hc.part, null);
+  }
+}
+function hcPctsDe(gid){ return hc.propio[gid] || hc.global; }
+// Cálculo completo: cuánto pagó cada uno, cuánto le toca, cómo queda su libre y quién le pasa a quién.
+function hcCalcular(){
+  const sel = hcSeleccionados();
+  const pago = {}, toca = {}, antes = {}, despues = {};
+  cuentas.forEach(c=>{ pago[c.id]=0; toca[c.id]=0; antes[c.id]=calcularSaldo(c.id).disponible; });
+  sel.forEach(g=>{
+    pago[g.quienPaga] += Number(g.monto||0);
+    repartoMonto('dividido', hc.part, hcPctsDe(g.id), Number(g.monto||0)).forEach(r=>{ toca[r.id] += r.monto; });
+  });
+  cuentas.forEach(c=>{
+    const quitaba = sel.reduce((t,g)=>t+parteDe(g.quienPaga, g.division, g.monto, c.id, g.porcentajes),0);
+    despues[c.id] = Math.round((antes[c.id] + quitaba - toca[c.id])*100)/100;
+    pago[c.id] = Math.round(pago[c.id]*100)/100; toca[c.id] = Math.round(toca[c.id]*100)/100;
+  });
+  // Quién le pasa a quién: los que pagaron de menos le pasan a los que pagaron de más.
+  const neto = cuentas.map(c=>({ id:c.id, v: Math.round((pago[c.id]-toca[c.id])*100)/100 }));
+  const deben = neto.filter(x=>x.v<-0.004).map(x=>({...x, v:-x.v})), cobran = neto.filter(x=>x.v>0.004);
+  const deudas = [];
+  deben.forEach(d=>{
+    cobran.forEach(c=>{
+      const m = Math.min(d.v, c.v);
+      if(m>0.004){ deudas.push({ de:d.id, a:c.id, monto:Math.round(m*100)/100 }); d.v-=m; c.v-=m; }
+    });
+  });
+  return { sel, pago, toca, antes, despues, deudas, total: sel.reduce((t,g)=>t+Number(g.monto||0),0) };
+}
+function renderHacerCuentas(){
+  const lista = gastosParaCuentas();
+  const r = hcCalcular();
+  const dos = hc.part.length===2;
+  const body = document.getElementById('modalBody');
+  const scroll = body.parentElement ? body.parentElement.scrollTop : 0;
+  body.innerHTML = `
+    ${ayuda('Elige los gastos que uno pagó pero que son de los dos. La app calcula cuánto le toca a cada uno y quién le tiene que pasar cuánto al otro. Antes de aplicar ves cómo queda el libre de cada uno; si alguien queda en negativo, mueve los porcentajes hasta que se vea bien. Si quieres un porcentaje distinto en un gasto, cámbialo solo en ese gasto.', '¿Cómo funciona?')}
+
+    <div class="field"><label>¿Entre quiénes?</label>
+      <div class="division-box">${cuentas.map(c=>`<label class="chip"><input type="checkbox" ${hc.part.includes(c.id)?'checked':''} onchange="hcCambiarPart('${c.id}', this.checked)">
+        <span class="dot" style="background:${colorCuenta(c.id)[0]}"></span> ${esc(c.nombre)}</label>`).join('')}</div></div>
+
+    <div class="field"><label>Reparto para todos los gastos</label>
+      <div class="segmented" style="margin-bottom:8px;">
+        <button class="${hc.modo==='libre'?'active':''}" onclick="hcModo('libre')">⚖️ Según lo libre</button>
+        <button class="${hc.modo==='iguales'?'active':''}" onclick="hcModo('iguales')">½ Iguales</button>
+        <button class="${hc.modo==='manual'?'active':''}" onclick="hcModo('manual')">✏️ A mano</button>
+      </div>
+      <div class="division-panel" style="margin-top:0;">
+        ${hc.part.map(id=>`<div class="div-fila">
+          <span class="chip" style="cursor:default;"><span class="dot" style="background:${colorCuenta(id)[0]}"></span> ${esc(nombreCuenta(id))}</span>
+          <span class="div-pct"><input type="number" inputmode="numeric" min="0" max="100" step="1" value="${hc.global[id]??''}" onchange="hcPctGlobal('${id}', this.value)"> %</span>
+          <span class="div-monto num">${hc.modo==='libre'?q(hcLibreBase()[id]):''}</span>
+        </div>`).join('')}
+        <div class="div-nota">${hc.modo==='libre'?'Según lo libre de cada uno antes de estos gastos.':''}${hcSumaOk(hc.global)?'':` <span class="ocr-dup">Suman ${hcSuma(hc.global)}%, deben sumar 100%.</span>`}</div>
+      </div></div>
+
+    <div class="field"><label>Gastos de los últimos 60 días (${Object.keys(hc.sel).filter(k=>hc.sel[k]).length} elegidos)</label>
+      ${lista.length ? lista.map(g=>{
+        const on = !!hc.sel[g.id], pc = hcPctsDe(g.id);
+        return `<div class="hc-gasto ${on?'on':''}">
+          <label class="hc-fila"><input type="checkbox" ${on?'checked':''} onchange="hcToggle('${g.id}', this.checked)">
+            <span class="hc-txt"><b>${esc(g.descripcion)||'(sin descripción)'}</b>
+              <small>${fechaHora(g)} · pagó <span class="dot" style="background:${colorCuenta(g.quienPaga)[0]}"></span> ${esc(nombreCuenta(g.quienPaga))}</small></span>
+            <span class="num">${q(g.monto)}</span></label>
+          ${on ? `<div class="hc-reparto">${repartoMonto('dividido', hc.part, pc, Number(g.monto||0)).map(x=>
+              `<span><span class="dot" style="background:${colorCuenta(x.id)[0]}"></span>${esc(nombreCuenta(x.id))} ${pc[x.id]}% · ${q(x.monto)}</span>`).join('')}
+            ${dos ? `<span class="hc-propio">${esc(nombreCuenta(hc.part[0]))} <input type="number" inputmode="numeric" min="0" max="100" step="1" value="${pc[hc.part[0]]}" onchange="hcPctPropio('${g.id}', this.value)"> %
+              ${hc.propio[g.id]?`<button class="btn btn-ghost btn-small" onclick="hcQuitarPropio('${g.id}')">↺</button>`:''}</span>` : ''}
+          </div>` : ''}
+        </div>`;
+      }).join('') : `<div class="ocr-estado">No hay gastos de una sola cuenta en los últimos 60 días.</div>`}
+    </div>
+
+    ${r.sel.length ? `
+    <div class="hc-resumen">
+      <div class="hc-res-titulo">Así quedaría</div>
+      ${cuentas.filter(c=>hc.part.includes(c.id) || r.pago[c.id]>0).map(c=>`
+        <div class="hc-res-fila">
+          <span class="hc-res-nombre"><span class="dot" style="background:${colorCuenta(c.id)[0]}"></span> ${esc(c.nombre)}</span>
+          <span class="hc-res-det">Pagó ${q(r.pago[c.id])} · le toca ${q(r.toca[c.id])}</span>
+          <span class="hc-res-libre">Libre ${q(r.antes[c.id])} → <b class="num" style="${r.despues[c.id]<0?'color:var(--danger)':''}">${q(r.despues[c.id])}</b></span>
+        </div>`).join('')}
+      <div class="hc-res-final">${r.deudas.length
+        ? r.deudas.map(d=>`💸 <b>${esc(nombreCuenta(d.de))}</b> le pasa <b>${q(d.monto)}</b> a <b>${esc(nombreCuenta(d.a))}</b>`).join('<br>')
+        : '✓ Ya están a mano con estos gastos.'}</div>
+      ${cuentas.some(c=>r.despues[c.id]<0)?`<div class="ocr-dup" style="margin-top:6px;">Alguien queda en negativo. Prueba moviendo los porcentajes.</div>`:''}
+    </div>
+    <div class="actions-row" style="margin-top:14px;">
+      <button class="btn btn-primary" style="flex:1;" onclick="aplicarHacerCuentas('pagado')">✅ Ya nos pusimos a mano</button>
+      ${r.deudas.length?`<button class="btn btn-ghost" style="flex:1;" onclick="aplicarHacerCuentas('pendiente')">⏳ Lo pasa después</button>`:''}
+    </div>` : ''}`;
+  if(body.parentElement) body.parentElement.scrollTop = scroll;
+}
+function hcSuma(p){ return hc.part.reduce((t,i)=>t+(Number(p[i])||0),0); }
+function hcSumaOk(p){ return hcSuma(p)===100; }
+function hcCambiarPart(id, on){
+  hc.part = cuentas.map(c=>c.id).filter(x=> x===id ? on : hc.part.includes(x));
+  if(hc.part.length<2){ hc.part = on ? hc.part : hc.part.concat([id]); alert("Tiene que haber al menos 2 cuentas."); }
+  hc.propio = {};
+  if(hc.modo==='manual') hc.modo = 'iguales';
+  hcRecalcularGlobal(); renderHacerCuentas();
+}
+function hcModo(m){ hc.modo = m; hcRecalcularGlobal(); renderHacerCuentas(); }
+function hcPctGlobal(id, v){
+  v = Math.max(0, Math.min(100, Math.round(Number(v)||0)));
+  hc.modo = 'manual';
+  hc.global = { ...hc.global, [id]: v };
+  if(hc.part.length===2){ const otra = hc.part.find(x=>x!==id); hc.global[otra] = 100 - v; }
+  renderHacerCuentas();
+}
+function hcPctPropio(gid, v){
+  v = Math.max(0, Math.min(100, Math.round(Number(v)||0)));
+  hc.propio[gid] = { [hc.part[0]]: v, [hc.part[1]]: 100 - v };
+  renderHacerCuentas();
+}
+function hcQuitarPropio(gid){ delete hc.propio[gid]; renderHacerCuentas(); }
+function hcToggle(gid, on){
+  if(on) hc.sel[gid] = true; else { delete hc.sel[gid]; delete hc.propio[gid]; }
+  if(hc.modo==='libre') hcRecalcularGlobal();
+  renderHacerCuentas();
+}
+function aplicarHacerCuentas(estado){
+  const r = hcCalcular();
+  if(!r.sel.length) return;
+  if(!hcSumaOk(hc.global) && r.sel.some(g=>!hc.propio[g.id])){ alert(`Los porcentajes suman ${hcSuma(hc.global)}%. Ajústalos para que sumen 100%.`); return; }
+  const ref = col('liquidaciones').doc();
+  const batch = db.batch();
+  const detalle = r.sel.map(g=>{
+    const pc = { ...hcPctsDe(g.id) };
+    batch.update(col('gastos').doc(g.id), { quienPaga:'dividido', division:hc.part.slice(), porcentajes:pc, capa:'Pareja', liquidacionId:ref.id });
+    return { id:g.id, descripcion:g.descripcion||'', monto:Number(g.monto||0), fecha:g.fecha,
+      prev:{ quienPaga:g.quienPaga, division:g.division||null, porcentajes:g.porcentajes||null, capa:g.capa||'Pareja' }, porcentajes:pc };
+  });
+  batch.set(ref, { fecha:hoyISO(), estado: r.deudas.length ? estado : 'pagado', deudas:r.deudas, gastos:detalle,
+    total:Math.round(r.total*100)/100, participantes:hc.part.slice(), createdAt: FieldValue.serverTimestamp() });
+  batch.commit().catch(e=>alert("No se pudieron aplicar las cuentas: "+e.message));
+  hc = null;
+  closeModal();
+}
+// Lo que una cuenta tiene "de más" o "de menos" en el banco por cuentas pendientes.
+function pendientePareja(id){
+  let debe = 0, cobra = 0;
+  liquidaciones.filter(l=>l.estado==='pendiente').forEach(l=>(l.deudas||[]).forEach(d=>{
+    if(d.de===id) debe += Number(d.monto||0);
+    if(d.a===id) cobra += Number(d.monto||0);
+  }));
+  return { debe:Math.round(debe*100)/100, cobra:Math.round(cobra*100)/100 };
+}
+function marcarCuentasPagadas(lid){
+  const l = liquidaciones.find(x=>x.id===lid); if(!l) return;
+  const txt = (l.deudas||[]).map(d=>`${nombreCuenta(d.de)} le pasó ${q(d.monto)} a ${nombreCuenta(d.a)}`).join(', ');
+  if(!confirm(`¿Confirmas que ${txt}? No se anota ninguna transferencia: los gastos ya están repartidos.`)) return;
+  col('liquidaciones').doc(lid).update({ estado:'pagado', fechaPago:hoyISO() });
+}
+function deshacerCuentas(lid){
+  const l = liquidaciones.find(x=>x.id===lid); if(!l) return;
+  if(!confirm("¿Deshacer estas cuentas? Cada gasto vuelve a como estaba antes (quién lo pagó y su reparto).")) return;
+  const batch = db.batch();
+  (l.gastos||[]).forEach(x=>{
+    if(!gastos.some(g=>g.id===x.id)) return;
+    batch.update(col('gastos').doc(x.id), { quienPaga:x.prev.quienPaga, division:x.prev.division||null,
+      porcentajes:x.prev.porcentajes||null, capa:x.prev.capa||'Pareja', liquidacionId:FieldValue.delete() });
+  });
+  batch.delete(col('liquidaciones').doc(lid));
+  batch.commit().catch(e=>alert("No se pudo deshacer: "+e.message));
+}
+function tarjetaLiquidacionHTML(l){
+  const pend = l.estado==='pendiente';
+  const deudas = (l.deudas||[]).map(d=>`${esc(nombreCuenta(d.de))} → ${esc(nombreCuenta(d.a))}: <b>${q(d.monto)}</b>`).join('<br>') || 'Sin pagos entre ustedes';
+  const barra = (l.deudas&&l.deudas[0]) ? `linear-gradient(180deg, ${colorCuenta(l.deudas[0].de)[0]}, ${colorCuenta(l.deudas[0].a)[0]})` : 'var(--text-soft)';
+  return `
+    <div class="receipt" style="--bar:${barra}">
+      <div class="receipt-row">
+        <div>
+          <div class="receipt-title">🧮 Cuentas del ${fmtFecha(l.fecha)}</div>
+          <div class="receipt-sub">${(l.gastos||[]).length} gasto(s) · total ${q(l.total)}</div>
+          <div class="receipt-sub" style="margin-top:4px;">${deudas}</div>
+          <span class="tag ${pend?'pendiente':'pagado'}">${pend?'⏳ Falta que pague':'✅ A mano'+(l.fechaPago?' · '+fmtFecha(l.fechaPago):'')}</span>
+        </div>
+      </div>
+      <details class="ayuda" style="margin:8px 0 0;"><summary>Ver gastos</summary><div class="ayuda-txt">
+        ${(l.gastos||[]).map(x=>`${esc(x.descripcion)||'(sin descripción)'} · ${q(x.monto)} · ${Object.entries(x.porcentajes||{}).map(([id,p])=>esc(nombreCuenta(id))+' '+p+'%').join(' / ')}`).join('<br>')}
+      </div></details>
+      <div class="actions-row">
+        ${pend?`<button class="btn btn-ok btn-small" onclick="marcarCuentasPagadas('${l.id}')">💸 Ya pagó</button>`:''}
+        <button class="btn btn-ghost btn-small" onclick="deshacerCuentas('${l.id}')">↩️ Deshacer</button>
+      </div>
+    </div>`;
+}
+function renderCuentasPareja(){
+  const pend = liquidaciones.filter(l=>l.estado==='pendiente');
+  const banner = document.getElementById('cuentasPendientesBanner');
+  if(banner) banner.innerHTML = pend.length ? pend.map(tarjetaLiquidacionHTML).join('') : '';
+  const lista = document.getElementById('cuentasParejaList');
+  if(lista) lista.innerHTML = liquidaciones.length
+    ? `<div class="section-title"><h2 style="font-size:15px;">🧮 Cuentas hechas</h2></div>` + ordenarRecientes(liquidaciones).map(tarjetaLiquidacionHTML).join('')
+    : '';
 }
 </script>
 </body>
