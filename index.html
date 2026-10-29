@@ -80,10 +80,11 @@
   .chip{ display:inline-flex; align-items:center; gap:6px; padding:7px 12px; border-radius:20px; background:var(--tag-bg); font-size:13.5px; font-weight:700; color:var(--text); cursor:pointer; }
   .chip input{ width:auto; margin:0; }
   .division-panel{ margin-top:10px; padding:10px; border-radius:14px; background:var(--card); box-shadow:var(--shadow-sm); }
-  .div-fila{ display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+  .div-fila{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:8px; }
   .div-fila .chip{ flex:1; min-width:0; }
   .div-pct{ display:inline-flex; align-items:center; gap:4px; font-weight:700; color:var(--text-soft); }
   .field .div-pct input{ width:64px; padding:8px; text-align:right; }
+  .field .div-pct input.div-q{ width:96px; }
   .div-pct input:disabled{ opacity:.4; }
   .div-monto{ min-width:78px; text-align:right; font-size:13px; color:var(--text-soft); }
   .div-nota{ font-size:12px; font-weight:600; color:var(--text-soft); margin-top:6px; line-height:1.45; }
@@ -751,7 +752,7 @@ function repartoMonto(valor, division, pcts, monto){
 function etiquetaQuien(valor, division, pcts){
   const p = participantes(valor, division);
   if(p.length<=1) return nombreCuenta(p[0]);
-  return tienePcts(valor, pcts, p) ? p.map(id=>`${nombreCuenta(id)} ${pcts[id]}%`).join(' + ') : p.map(nombreCuenta).join(' + ');
+  return tienePcts(valor, pcts, p) ? p.map(id=>`${nombreCuenta(id)} ${fmtPct(pcts[id])}%`).join(' + ') : p.map(nombreCuenta).join(' + ');
 }
 function barBg(valor, division){
   const p = participantes(valor, division);
@@ -777,14 +778,23 @@ function ayuda(texto, titulo){
 // opts.porcentajes: los guardados (al editar). opts.devolver: el registro que se está editando, para
 // calcular "según lo libre" con el dinero que había ANTES de ese gasto.
 const divCtx = {};
+// Muestra un porcentaje sin decimales si es entero, o con hasta 2 decimales (ej. 19.58).
+function fmtPct(p){ p = Number(p)||0; return Math.abs(p-Math.round(p))<0.005 ? String(Math.round(p)) : String(Math.round(p*100)/100); }
 function selectorQuien(id, valor, division, permitirDividir, extraOnchange, opts){
   opts = opts || {};
   const dividir = permitirDividir && cuentas.length>1;
   const esDiv = (valor==='dividido' || valor==='50/50');
   const sel = (esDiv && dividir) ? 'dividido' : (cuentaPorId(valor) ? valor : (cuentas[0] ? cuentas[0].id : ''));
   const part = esDiv ? participantes(valor, division) : cuentas.map(c=>c.id);
-  const pcts = esDiv ? pctsEnteros(part, tienePcts(valor, opts.porcentajes, part) ? opts.porcentajes : null) : {};
-  divCtx[id] = { devolver: opts.devolver || null, iniciado: esDiv };
+  // Porcentajes guardados (pueden tener decimales si se repartió por monto) o partes iguales.
+  const guardados = tienePcts(valor, opts.porcentajes, part) ? opts.porcentajes : null;
+  const exact = {};
+  if(esDiv){
+    if(guardados) part.forEach(p=>exact[p]=Number(guardados[p])||0);
+    else Object.assign(exact, pctsEnteros(part, null));
+  }
+  const conDecimales = part.some(p=>exact[p]!=null && Math.abs(exact[p]-Math.round(exact[p]))>0.005);
+  divCtx[id] = { devolver: opts.devolver || null, iniciado: esDiv, exact, modo: conDecimales ? 'monto' : 'manual' };
   if(esDiv && dividir) setTimeout(()=>pintarDivision(id), 0);
   return `
     <select id="${id}" onchange="toggleDivision('${id}');${extraOnchange||''}">
@@ -796,8 +806,8 @@ function selectorQuien(id, valor, division, permitirDividir, extraOnchange, opts
         <div class="div-fila">
           <label class="chip"><input type="checkbox" id="${id}_chk_${c.id}" ${part.includes(c.id)?'checked':''} onchange="cambioCuentaDivision('${id}')">
             <span class="dot" style="background:${colorCuenta(c.id)[0]}"></span> ${esc(c.nombre)}</label>
-          <span class="div-pct"><input type="number" inputmode="numeric" min="0" max="100" step="1" id="${id}_pct_${c.id}" value="${pcts[c.id]!=null?pcts[c.id]:''}" oninput="cambioPctDivision('${id}','${c.id}')"> %</span>
-          <span class="div-monto num" id="${id}_amt_${c.id}"></span>
+          <span class="div-pct"><input type="number" inputmode="decimal" min="0" max="100" step="any" id="${id}_pct_${c.id}" value="${exact[c.id]!=null?fmtPct(exact[c.id]):''}" oninput="cambioPctDivision('${id}','${c.id}')"> %</span>
+          <span class="div-pct">Q <input class="div-q" type="number" inputmode="decimal" min="0" step="0.01" id="${id}_q_${c.id}" oninput="cambioMontoDivision('${id}','${c.id}')"></span>
         </div>`).join('')}
       <div class="actions-row" style="margin-top:6px;">
         <button type="button" class="btn btn-ghost btn-small" onclick="aplicarDivision('${id}','libre')">⚖️ Según lo libre</button>
@@ -832,52 +842,74 @@ function libreParaDividir(selId){
   return out;
 }
 function cuentasMarcadas(selId){ return cuentas.filter(c=>{ const el=document.getElementById(selId+'_chk_'+c.id); return el && el.checked; }).map(c=>c.id); }
+function montoDivision(){ const el = document.getElementById('f_monto'); return el ? (parseFloat(el.value)||0) : 0; }
 function aplicarDivision(selId, modo){
   const ids = cuentasMarcadas(selId);
   const ctx = divCtx[selId] || (divCtx[selId] = {});
-  ctx.modo = modo;
-  let pcts;
+  ctx.modo = modo; ctx.fijo = null;
   if(modo==='libre'){
     const libre = libreParaDividir(selId);
     const pesos = {}; ids.forEach(i=>pesos[i]=Math.max(0, libre[i]||0));
-    pcts = pctsEnteros(ids, ids.some(i=>pesos[i]>0) ? pesos : null);
-  } else pcts = pctsEnteros(ids, null);
-  cuentas.forEach(c=>{ const el=document.getElementById(selId+'_pct_'+c.id); if(el) el.value = ids.includes(c.id) ? pcts[c.id] : ''; });
+    ctx.exact = pctsEnteros(ids, ids.some(i=>pesos[i]>0) ? pesos : null);
+  } else ctx.exact = pctsEnteros(ids, null);
+  pintarDivision(selId, true);
+}
+function cambioCuentaDivision(selId){
+  const m = divCtx[selId] && divCtx[selId].modo;
+  aplicarDivision(selId, m==='iguales' ? 'iguales' : 'libre');
+}
+// Escribiste un porcentaje: con dos cuentas, la otra se ajusta para sumar 100%.
+function cambioPctDivision(selId, cambiado){
+  const ids = cuentasMarcadas(selId), ctx = divCtx[selId];
+  const el = document.getElementById(selId+'_pct_'+cambiado);
+  let v = parseFloat(el.value); if(isNaN(v)) v = 0; v = Math.max(0, Math.min(100, v));
+  ctx.modo = 'manual'; ctx.fijo = null;
+  ctx.exact = { ...(ctx.exact||{}), [cambiado]: v };
+  if(ids.length===2 && ids.includes(cambiado)) ctx.exact[ids.find(i=>i!==cambiado)] = 100 - v;
   pintarDivision(selId);
 }
-function cambioCuentaDivision(selId){ aplicarDivision(selId, (divCtx[selId]&&divCtx[selId].modo)||'libre'); }
-function cambioPctDivision(selId, cambiado){
-  const ids = cuentasMarcadas(selId);
-  const el = document.getElementById(selId+'_pct_'+cambiado);
-  let v = Math.round(Number(el.value)); if(isNaN(v)) v = 0; v = Math.max(0, Math.min(100, v));
-  if(String(v)!==el.value && el.value!=='') el.value = v;
-  if(divCtx[selId]) divCtx[selId].modo = 'manual';
-  // Con dos cuentas, la otra se ajusta sola para sumar 100%.
-  if(ids.length===2 && ids.includes(cambiado)){
-    const otra = ids.find(i=>i!==cambiado);
-    document.getElementById(selId+'_pct_'+otra).value = 100 - v;
+// Escribiste cuánto pone una cuenta en quetzales: con dos cuentas, la otra pone el resto.
+function cambioMontoDivision(selId, cambiado){
+  const ids = cuentasMarcadas(selId), ctx = divCtx[selId];
+  const total = montoDivision();
+  let v = parseFloat(document.getElementById(selId+'_q_'+cambiado).value); if(isNaN(v)) v = 0;
+  v = Math.max(0, total ? Math.min(total, v) : v);
+  ctx.modo = 'monto'; ctx.fijo = { id:cambiado, monto:v };
+  if(total>0){
+    ctx.exact = { ...(ctx.exact||{}), [cambiado]: v/total*100 };
+    if(ids.length===2 && ids.includes(cambiado)) ctx.exact[ids.find(i=>i!==cambiado)] = 100 - v/total*100;
   }
   pintarDivision(selId);
 }
-function pintarDivision(selId){
-  const ids = cuentasMarcadas(selId);
-  const montoEl = document.getElementById('f_monto');
-  const monto = montoEl ? (parseFloat(montoEl.value)||0) : 0;
-  let suma = 0;
+function pintarDivision(selId, forzar){
+  const ids = cuentasMarcadas(selId), ctx = divCtx[selId] || {};
+  const total = montoDivision();
+  ctx.exact = ctx.exact || {};
+  // Si cambió el monto del gasto y habías fijado lo que pone una cuenta, se respeta ese monto.
+  if(ctx.modo==='monto' && ctx.fijo && total>0 && ids.length===2 && ids.includes(ctx.fijo.id)){
+    const p = Math.min(ctx.fijo.monto, total)/total*100;
+    ctx.exact[ctx.fijo.id] = p; ctx.exact[ids.find(i=>i!==ctx.fijo.id)] = 100 - p;
+  }
+  let suma = 0, sumaQ = 0;
   cuentas.forEach(c=>{
-    const pctEl = document.getElementById(selId+'_pct_'+c.id), amtEl = document.getElementById(selId+'_amt_'+c.id);
-    if(!pctEl || !amtEl) return;
-    pctEl.disabled = !ids.includes(c.id);
-    const v = ids.includes(c.id) ? Number(pctEl.value)||0 : 0;
-    suma += v;
-    amtEl.textContent = ids.includes(c.id) && monto ? q(monto*v/100) : '';
+    const pctEl = document.getElementById(selId+'_pct_'+c.id), qEl = document.getElementById(selId+'_q_'+c.id);
+    if(!pctEl || !qEl) return;
+    const on = ids.includes(c.id);
+    pctEl.disabled = qEl.disabled = !on;
+    const p = on ? (Number(ctx.exact[c.id])||0) : 0;
+    suma += p;
+    const montoCuenta = total ? Math.round(total*p)/100 : 0;
+    sumaQ += montoCuenta;
+    if(forzar || document.activeElement!==pctEl) pctEl.value = on ? fmtPct(p) : '';
+    if(forzar || document.activeElement!==qEl) qEl.value = on && total ? montoCuenta.toFixed(2) : '';
   });
   const nota = document.getElementById(selId+'_nota'); if(!nota) return;
-  const ctx = divCtx[selId] || {};
-  let txt = suma===100 ? '' : `<span class="ocr-dup">Suman ${suma}% — deben sumar 100%.</span><br>`;
+  let txt = Math.abs(suma-100)<0.01 ? '' : `<span class="ocr-dup">Suman ${fmtPct(suma)}%${total?` (${q(sumaQ)} de ${q(total)})`:''}: deben sumar 100%.</span><br>`;
   if(ctx.modo==='libre'){
     const libre = libreParaDividir(selId);
     txt += `Según lo libre${ctx.devolver?' antes de este gasto':''}: ` + ids.map(i=>`${esc(nombreCuenta(i))} ${q(libre[i])}`).join(' · ');
+  } else if(!total){
+    txt += 'Escribe el monto del gasto para repartir en quetzales.';
   }
   nota.innerHTML = txt;
 }
@@ -888,7 +920,7 @@ function toggleDivision(id){
   if(on){
     const ctx = divCtx[id] || (divCtx[id] = {});
     if(!ctx.iniciado){ ctx.iniciado = true; aplicarDivision(id, 'libre'); }
-    else pintarDivision(id);
+    else pintarDivision(id, true);
   }
 }
 document.addEventListener('input', e=>{
@@ -899,10 +931,10 @@ function leerQuien(id){
   if(v!=='dividido') return { valor:v, division:null, porcentajes:null };
   const div = cuentasMarcadas(id);
   if(div.length<2){ alert("Para dividir, marca al menos 2 cuentas."); return null; }
-  const porcentajes = {};
-  div.forEach(c=>{ porcentajes[c] = Math.round(Number(document.getElementById(id+'_pct_'+c).value)||0); });
+  const ctx = divCtx[id] || {}, porcentajes = {};
+  div.forEach(c=>{ porcentajes[c] = Math.round((Number((ctx.exact||{})[c])||0)*1e6)/1e6; });
   const suma = div.reduce((t,c)=>t+porcentajes[c],0);
-  if(suma!==100){ alert(`Los porcentajes suman ${suma}%. Ajústalos para que sumen 100%.`); return null; }
+  if(Math.abs(suma-100)>0.01){ alert(`Los porcentajes suman ${fmtPct(suma)}%. Ajústalos para que sumen 100%.`); return null; }
   return { valor:'dividido', division:div, porcentajes };
 }
 function selectorCuentaSimple(id, valor){
@@ -2345,7 +2377,7 @@ function renderTarjeta(){
         <div class="bc-block"><div class="lbl">Libre</div><div class="big num ${disp<0?'neg':''}">${q(disp)}</div></div>
         <div class="bc-divider"></div>
         <div class="bc-block"><div class="lbl">Después de tarjeta</div><div class="mid num ${(disp-tarjPend)<0?'neg':''}">${q(disp-tarjPend)}</div></div>
-        <div class="sub">Tarjeta sin plan: ${q(tarjPend)}</div>
+        <div class="sub">Monto por pagar de TC: ${q(tarjPend)}</div>
       </div>`;
   }).join("");
 
