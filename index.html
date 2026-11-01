@@ -89,6 +89,35 @@
   .div-monto{ min-width:78px; text-align:right; font-size:13px; color:var(--text-soft); }
   .div-nota{ font-size:12px; font-weight:600; color:var(--text-soft); margin-top:6px; line-height:1.45; }
   .bc-editable{ cursor:pointer; border-radius:10px; }
+  /* Hoy puedes gastar */
+  .hoy-frase{ font-size:14px; font-weight:700; margin:0 0 12px; line-height:1.4; }
+  .hoy-card{ border-radius:var(--radius); padding:18px 16px; box-shadow:var(--shadow-md); min-width:0; }
+  .hoy-nombre{ font-size:13px; font-weight:700; color:var(--text-soft); }
+  .hoy-lbl{ font-size:12px; font-weight:700; color:var(--text-soft); margin-top:8px; }
+  .hoy-num{ font-size:28px; font-weight:700; letter-spacing:-0.02em; line-height:1.1; margin-top:2px; }
+  .hoy-num.neg{ color:var(--danger); }
+  .hoy-barra{ height:6px; border-radius:6px; background:rgba(127,127,127,.2); margin:10px 0 8px; overflow:hidden; }
+  .hoy-barra span{ display:block; height:100%; border-radius:6px; background:var(--text); opacity:.75; }
+  .hoy-sub{ font-size:11.5px; font-weight:600; color:var(--text-soft); line-height:1.4; }
+  .hoy-sub b, .sobre-pie b, .sobre-hint b{ white-space:nowrap; }
+  /* Sobres */
+  .sobre{ display:block; width:100%; text-align:left; border:none; cursor:pointer; font-family:'Quicksand',sans-serif; color:var(--text);
+    background:var(--card); border-radius:16px; padding:12px 14px; margin-bottom:10px; box-shadow:var(--shadow-sm); }
+  .sobre:active{ transform:scale(.99); }
+  .sobre-top{ display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .sobre-cat{ font-weight:700; font-size:14.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .sobre-quien{ display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:700; color:var(--text-soft); white-space:nowrap; }
+  .sobre-barra{ height:10px; border-radius:10px; background:var(--track); margin:9px 0 7px; overflow:hidden; }
+  .sobre-barra span{ display:block; height:100%; border-radius:10px; background:linear-gradient(90deg, var(--acc-a), var(--acc-b)); transition:width 400ms ease-out; }
+  .sobre-ojo .sobre-barra span{ background:linear-gradient(90deg, #D9A93F, #C98A2E); }
+  .sobre-pasado .sobre-barra span{ background:var(--danger); }
+  .sobre-pie{ display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; font-size:12px; font-weight:600; color:var(--text-soft); }
+  .sobre-pie b{ color:var(--text); }
+  .sobre-txt-pasado, .sobre-pasado .sobre-pie b.sobre-txt-pasado{ color:var(--danger); }
+  .sobre-vacio{ background:var(--card); border-radius:16px; padding:16px; box-shadow:var(--shadow-sm); font-size:13.5px; font-weight:600; color:var(--text-soft); line-height:1.5; }
+  .sobre-hint{ font-size:12.5px; font-weight:600; padding:8px 12px; border-radius:10px; margin:-6px 0 14px; background:var(--ok-bg); color:var(--text); }
+  .sobre-hint.sobre-ojo{ background:var(--warn-bg); }
+  .sobre-hint.sobre-pasado{ background:rgba(155,67,81,.15); color:var(--danger); }
   .hc-gasto{ border:1.5px solid var(--line); border-radius:12px; background:var(--card); margin-bottom:8px; }
   .hc-gasto.on{ border-color:var(--brand); }
   .hc-fila{ display:flex; align-items:center; gap:10px; padding:10px 12px; cursor:pointer; font-size:14px; }
@@ -532,11 +561,16 @@
 
     <!-- ============ VISUAL ============ -->
     <section class="view active" id="view-visual">
+      <div id="hoyHero"></div>
+
+      <div class="section-title"><h2>Sobres del mes</h2>
+        <button class="btn btn-ghost btn-small" onclick="abrirSobres()">✏️ Editar</button></div>
+      <div id="sobresList"></div>
+
       <div class="section-title"><h2>Panorama</h2></div>
       <div class="balance-grid" id="visualBalance"></div>
       <div id="visualMutuo"></div>
       <div class="fact-grid" id="factGrid"></div>
-      <div class="fact-grid" id="factGridComparativo" style="margin-top:-4px;"></div>
 
       <div class="chart-card">
         <h3>Top 10 gastos más grandes del mes</h3>
@@ -1135,7 +1169,7 @@ function renderAll(){
 }
 
 // ================= HELPERS =================
-function q(m){ return "Q " + Number(m||0).toLocaleString('es-GT',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+function q(m){ return "Q\u00A0" + Number(m||0).toLocaleString('es-GT',{minimumFractionDigits:2, maximumFractionDigits:2}); }
 function fmtFecha(f){ if(!f) return ""; const d=new Date(f+"T00:00:00"); return d.toLocaleDateString('es-GT',{day:'2-digit',month:'short',year:'numeric'}); }
 function hoyISO(){
   const d = new Date();
@@ -2751,8 +2785,9 @@ function renderVisual(){
   if(!cuentas.length) return;
   document.getElementById('visualBalance').innerHTML = cuentas.map(c=>tarjetaSaldoHTML(c.id)).join('');
   document.getElementById('visualMutuo').innerHTML = cuentas.length>1 ? tarjetaSaldoMutuoHTML() : '';
+  renderHoy();
+  renderSobres();
   renderFunFacts();
-  renderComparativoMes();
   renderTop3Gastos();
   renderChartAcumulado();
   renderChartCategoria();
@@ -2772,18 +2807,6 @@ function tarjetaSaldoMutuoHTML(){
       <div class="sub">📌 Planificado: ${q(sum('porPagar'))}</div>
       <div class="sub">🐷 Ahorrado: ${q(sum('saldoAhorro'))}</div>
     </div>`;
-}
-function renderComparativoMes(){
-  // Lo que cada cuenta puede gastar por día de su dinero libre, hasta fin de mes
-  const hoy = new Date();
-  const diasRestantes = new Date(hoy.getFullYear(), hoy.getMonth()+1, 0).getDate() - hoy.getDate() + 1;
-  const txtDias = `${diasRestantes} día${diasRestantes===1?'':'s'}`;
-  document.getElementById('factGridComparativo').innerHTML = cuentas.map(c=>{
-    const porDia = calcularSaldo(c.id).disponible / diasRestantes;
-    return `<div class="fact-card"><span class="ic"><span class="dot-lg" style="background:${colorCuenta(c.id)[0]}"></span></span>
-      <div class="val num" style="${porDia<0?'color:var(--danger)':''}">${q(porDia)}</div>
-      <div class="lbl">Libre por día · ${esc(c.nombre)}<br>hasta fin de mes (${txtDias})</div></div>`;
-  }).join('');
 }
 function renderTop3Gastos(){
   const prefijo = prefijoMes(new Date());
@@ -3019,7 +3042,8 @@ function guardarAjustes(){
     tema: b.tema, visualAlcance: b.visualAlcance==='todo' ? 'todo' : 'compartido',
     diaCorte: Math.min(28, Math.max(1, parseInt(b.diaCorte)||11)),
     diaPago: Math.min(28, Math.max(1, parseInt(b.diaPago)||5)),
-    cuentas: b.cuentas.map(c=>({ id:c.id, nombre:String(c.nombre).trim(), color:Number(c.color)||0, pista:String(c.pista||'').trim() }))
+    cuentas: b.cuentas.map(c=>({ id:c.id, nombre:String(c.nombre).trim(), color:Number(c.color)||0, pista:String(c.pista||'').trim() })),
+    sobres: listaSobres().filter(x=>x.quien==='todos' || b.cuentas.some(c=>c.id===x.quien))
   };
   const saldos = {};
   data.cuentas.forEach(c=>{ saldos[c.id] = Number(b.saldos[c.id]||0); });
@@ -3058,6 +3082,7 @@ function openAddModal(){
       <div class="field"><label>¿Qué cuenta paga?</label>${selectorQuien('f_quien', ultimaCuenta(), null, true, 'sugerirCapaSegunQuien()')}</div>
       ${campoCapa('Personal')}
       <div class="field"><label>Categoría</label><select id="f_cat">${opcionesCategoria(CATEGORIAS, null)}</select></div>
+      <div id="sobreHint"></div>
       <button class="btn btn-primary" onclick="guardarGasto()">Guardar gasto</button>`;
   }
   else if(currentView==='movimientos' && currentMovSegment==='planificacion'){
@@ -3114,6 +3139,7 @@ function openAddModal(){
       <div class="field"><label>Fecha</label><input id="f_fecha" type="date" value="${hoyISO()}"></div>
       <div class="field"><label>¿A qué cuenta le toca pagarla?</label>${selectorQuien('f_quien', ultimaCuenta(), null, true)}</div>
       <div class="field"><label>Categoría</label><select id="f_cat">${opcionesCategoria(CATEGORIAS, null)}</select></div>
+      <div id="sobreHint"></div>
       <div class="field"><label>¿Cumple algún plan? (opcional)</label>
         <select id="f_plan"><option value="">No</option>
           ${planesAbiertos.map(p=>`<option value="${p.id}">${esc(p.concepto)} (${esc(nombreCuenta(p.persona))}) — ${q(p.monto)}</option>`).join("")}
@@ -3127,6 +3153,7 @@ function openAddModal(){
   }
   else { return; }
   document.getElementById('modalOverlay').classList.add('active');
+  setTimeout(pintarPistaSobre, 0);
 }
 function closeModal(){
   document.getElementById('modalOverlay').classList.remove('active');
@@ -3630,6 +3657,7 @@ function aplicarMovimientoOcr(i){
     if(modo==='ingreso') ocrMarcar('f_persona', cuentaId);
     else if(ocrMarcar('f_quien', cuentaId)){ toggleDivision('f_quien'); if(modo==='gasto') sugerirCapaSegunQuien(); }
   }
+  setTimeout(pintarPistaSobre, 0);
   const dup = ocrYaAnotado(m, modo);
   document.getElementById('ocrZona').innerHTML = `
     <div class="ocr-estado">✓ Llené los campos en verde con <b>${esc(m.descripcion||'el movimiento')}</b> (${q(m.monto)}). Revísalos antes de guardar.
@@ -3875,6 +3903,237 @@ function renderCuentasPareja(){
   if(lista) lista.innerHTML = liquidaciones.length
     ? `<div class="section-title"><h2 style="font-size:15px;">🧮 Cuentas hechas</h2></div>` + ordenarRecientes(liquidaciones).map(tarjetaLiquidacionHTML).join('')
     : '';
+}
+
+// ================= SOBRES POR CATEGORÍA =================
+// Cada sobre: { id, categoria, quien:'todos'|idCuenta, monto }. Se guardan en config/ajustes.sobres.
+// "todos" cuenta el gasto completo de la categoría; una cuenta cuenta solo su parte.
+// Las compras con tarjeta cuentan en su fecha de compra; el "Pago tarjeta" no cuenta (sería doble).
+const CATS_SIN_SOBRE = [CAT_TRANSFER, CAT_AJUSTE];
+function listaSobres(){ return Array.isArray(ajustes.sobres) ? ajustes.sobres.filter(s=>s && s.categoria && Number(s.monto)>0) : []; }
+function diasRestantesMes(){ const h = new Date(); return new Date(h.getFullYear(), h.getMonth()+1, 0).getDate() - h.getDate() + 1; }
+function movimientosCategoria(categoria, prefijo){
+  const g = gastos.filter(x=>x.categoria===categoria && x.origen!=='tarjeta' && x.fecha && x.fecha.startsWith(prefijo))
+    .map(x=>({ valor:x.quienPaga, division:x.division, porcentajes:x.porcentajes, monto:x.monto }));
+  const t = tarjetaGastos.filter(x=>x.categoria===categoria && x.fecha && x.fecha.startsWith(prefijo))
+    .map(x=>({ valor:x.quien, division:x.division, porcentajes:x.porcentajes, monto:x.monto }));
+  return g.concat(t);
+}
+function gastadoEnCategoria(categoria, quien, prefijo){
+  const total = movimientosCategoria(categoria, prefijo).reduce((t,m)=>
+    t + (quien==='todos' ? Number(m.monto||0) : parteDe(m.valor, m.division, m.monto, quien, m.porcentajes)), 0);
+  return Math.round(total*100)/100;
+}
+function estadoSobre(s){
+  const gastado = gastadoEnCategoria(s.categoria, s.quien, prefijoMes(new Date()));
+  const monto = Number(s.monto)||0;
+  const pct = monto>0 ? gastado/monto*100 : 0;
+  return { gastado, monto, restante: Math.round((monto-gastado)*100)/100, pct, nivel: pct>100 ? 'pasado' : pct>=85 ? 'ojo' : 'bien' };
+}
+// Promedio de los últimos 3 meses completos que tienen movimientos (para sugerir el monto).
+function promedioCategoria(categoria, quien){
+  const h = new Date(), valores = [];
+  for(let i=1; i<=3; i++){
+    const pref = prefijoMes(new Date(h.getFullYear(), h.getMonth()-i, 1));
+    const hayDatos = gastos.some(x=>x.fecha && x.fecha.startsWith(pref)) || tarjetaGastos.some(x=>x.fecha && x.fecha.startsWith(pref));
+    if(hayDatos) valores.push(gastadoEnCategoria(categoria, quien, pref));
+  }
+  if(!valores.length) return null;
+  return Math.round(valores.reduce((a,b)=>a+b,0)/valores.length);
+}
+function nombreQuienSobre(quien){ return quien==='todos' ? 'Los dos' : nombreCuenta(quien); }
+function puntoQuienSobre(quien){
+  return quien==='todos'
+    ? `<span class="sobre-quien">🤝 Los dos</span>`
+    : `<span class="sobre-quien"><span class="dot" style="background:${colorCuenta(quien)[0]}"></span> ${esc(nombreCuenta(quien))}</span>`;
+}
+function renderSobres(){
+  const cont = document.getElementById('sobresList'); if(!cont) return;
+  const sobres = listaSobres().filter(s=>s.quien==='todos' || cuentaPorId(s.quien));
+  if(!sobres.length){
+    cont.innerHTML = `<div class="sobre-vacio">
+      <div>✉️ Ponle un monto al mes a cada tipo de gasto (comida fuera, súper, salidas…) y aquí verán cuánto les queda.</div>
+      <button class="btn btn-primary btn-small" style="width:auto; margin-top:10px;" onclick="abrirSobres()">Crear sobres</button></div>`;
+    return;
+  }
+  const dias = diasRestantesMes();
+  const orden = s => s.quien==='todos' ? -1 : ordenCuenta(s.quien);
+  cont.innerHTML = sobres.slice().sort((a,b)=>orden(a)-orden(b) || estadoSobre(b).pct-estadoSobre(a).pct).map(s=>{
+    const e = estadoSobre(s);
+    const ancho = Math.min(100, e.pct);
+    const pie = e.restante>=0
+      ? `Quedan <b>${q(e.restante)}</b>${e.restante>0?` · ${q(e.restante/dias)}/día`:''}`
+      : `<b class="sobre-txt-pasado">Se pasó por ${q(-e.restante)}</b>`;
+    return `<button class="sobre sobre-${e.nivel}" onclick="irAGastosPorCategoria(${JSON.stringify(s.categoria).replace(/"/g,'&quot;')}, ${s.quien==='todos'?'null':`'${s.quien}'`})">
+      <div class="sobre-top"><span class="sobre-cat">${esc(s.categoria)}</span>${puntoQuienSobre(s.quien)}</div>
+      <div class="sobre-barra"><span style="width:${ancho}%"></span></div>
+      <div class="sobre-pie"><span class="num">${q(e.gastado)} de ${q(e.monto)}</span><span>${pie}</span></div>
+    </button>`;
+  }).join('');
+}
+
+// ----- Editor de sobres -----
+let sobresBorrador = null;
+function abrirSobres(){
+  sobresBorrador = listaSobres().map(s=>({ ...s }));
+  document.getElementById('modalTitle').textContent = "✉️ Sobres del mes";
+  renderEditorSobres();
+  document.getElementById('modalOverlay').classList.add('active');
+}
+function opcionesQuienSobre(sel){
+  return [`<option value="todos" ${sel==='todos'?'selected':''}>🤝 Los dos</option>`]
+    .concat(cuentas.map(c=>`<option value="${c.id}" ${c.id===sel?'selected':''}>${esc(c.nombre)}</option>`)).join('');
+}
+function renderEditorSobres(){
+  const b = sobresBorrador; if(!b) return;
+  const cats = CATEGORIAS.filter(c=>!CATS_SIN_SOBRE.includes(c));
+  const total = q => b.filter(s=>s.quien===q).reduce((t,s)=>t+(Number(s.monto)||0),0);
+  document.getElementById('modalBody').innerHTML = `
+    ${ayuda('Cada sobre es lo máximo que quieren gastar al mes en una categoría. "Los dos" cuenta todo lo que gasten en esa categoría, sin importar quién pague; un sobre de una persona cuenta solo su parte. Pueden tener los dos a la vez (por ejemplo, "Comida fuera" de los dos y "Compras personales" de cada uno). Los sobres se reinician solos cada mes e incluyen las compras con tarjeta.', '¿Cómo funcionan?')}
+    ${b.length ? b.map((s,i)=>{
+      const prom = promedioCategoria(s.categoria, s.quien);
+      return `<div class="aj-cuenta">
+        <div class="aj-fila" style="justify-content:space-between;">
+          <b style="font-size:14px;">${esc(s.categoria)}</b>
+          <button class="btn btn-ghost btn-small" onclick="sobresBorrador.splice(${i},1); renderEditorSobres()" aria-label="Quitar sobre">🗑️</button>
+        </div>
+        <div class="aj-fila">
+          <select class="aj-input" style="flex:1;" onchange="sobresBorrador[${i}].quien=this.value; renderEditorSobres()">${opcionesQuienSobre(s.quien)}</select>
+          <span class="aj-mini">Q</span>
+          <input class="aj-input" style="width:110px;" type="number" step="1" min="0" inputmode="decimal" value="${s.monto||''}" oninput="sobresBorrador[${i}].monto=parseFloat(this.value)||0">
+        </div>
+        ${prom!=null?`<div class="aj-fila"><span class="aj-mini">Promedio últimos meses: ${q(prom)}</span>
+          ${prom>0?`<button class="btn btn-ghost btn-small" onclick="sobresBorrador[${i}].monto=${Math.ceil(prom/50)*50}; renderEditorSobres()">Usar ${q(Math.ceil(prom/50)*50)}</button>`:''}</div>`:''}
+      </div>`;
+    }).join('') : `<p class="hint" style="margin:0 0 14px;">Todavía no tienen sobres. Agreguen el primero abajo.</p>`}
+
+    <div class="section-title" style="margin-top:8px;"><h2 style="font-size:16px;">Agregar sobre</h2></div>
+    <div class="field"><label>Categoría</label><select id="sb_cat" onchange="sugerirNuevoSobre()">${cats.map(c=>`<option>${c}</option>`).join('')}</select></div>
+    <div class="field"><label>¿De quién?</label><select id="sb_quien" onchange="sugerirNuevoSobre()">${opcionesQuienSobre('todos')}</select></div>
+    <div class="field"><label>Monto al mes (Q)</label><input id="sb_monto" type="number" step="1" min="0" inputmode="decimal" placeholder="0"></div>
+    <div class="div-nota" id="sb_sugerencia" style="margin:-8px 0 12px;"></div>
+    <button class="btn btn-ghost" style="width:100%; margin-bottom:18px;" onclick="agregarSobre()">＋ Agregar sobre</button>
+
+    ${b.length?`<div class="subtle-note" style="margin:0 0 12px;">Total al mes: ${['todos'].concat(cuentas.map(c=>c.id)).filter(x=>total(x)>0).map(x=>`${esc(nombreQuienSobre(x))} <b>${q(total(x))}</b>`).join(' · ')}</div>`:''}
+    <button class="btn btn-primary" onclick="guardarSobres()">Guardar sobres</button>`;
+  sugerirNuevoSobre();
+}
+function sugerirNuevoSobre(){
+  const cat = document.getElementById('sb_cat'), quien = document.getElementById('sb_quien'), nota = document.getElementById('sb_sugerencia');
+  if(!cat || !quien || !nota) return;
+  const repetido = sobresBorrador.some(s=>s.categoria===cat.value && s.quien===quien.value);
+  const prom = promedioCategoria(cat.value, quien.value);
+  nota.innerHTML = repetido ? '<span class="ocr-dup">Ya hay un sobre igual; cambia su monto arriba.</span>'
+    : prom ? `En los últimos meses gastaron en promedio <b>${q(prom)}</b> al mes en esto.` : '';
+  const monto = document.getElementById('sb_monto');
+  if(prom && !monto.value) monto.placeholder = String(Math.ceil(prom/50)*50);
+}
+function agregarSobre(){
+  const categoria = document.getElementById('sb_cat').value, quien = document.getElementById('sb_quien').value;
+  const montoEl = document.getElementById('sb_monto');
+  const monto = parseFloat(montoEl.value) || parseFloat(montoEl.placeholder) || 0;
+  if(monto<=0){ alert("Escribe el monto al mes del sobre."); return; }
+  if(sobresBorrador.some(s=>s.categoria===categoria && s.quien===quien)){ alert("Ya existe un sobre de esa categoría para esa persona."); return; }
+  sobresBorrador.push({ id:'s'+Date.now().toString(36), categoria, quien, monto });
+  renderEditorSobres();
+}
+function guardarSobres(){
+  const sobres = (sobresBorrador||[]).filter(s=>Number(s.monto)>0)
+    .map(s=>({ id:s.id, categoria:s.categoria, quien:s.quien, monto:Math.round(Number(s.monto)*100)/100 }));
+  ajustes.sobres = sobres;
+  col('config').doc('ajustes').set({ sobres }, { merge:true }).catch(e=>alert("No se pudieron guardar los sobres: "+e.message));
+  sobresBorrador = null;
+  closeModal();
+  renderAll();
+}
+
+// ----- Aviso del sobre al anotar un gasto -----
+function pintarPistaSobre(){
+  const el = document.getElementById('sobreHint'); if(!el) return;
+  const cat = document.getElementById('f_cat'), sel = document.getElementById('f_quien');
+  if(!cat){ el.innerHTML=''; return; }
+  const monto = parseFloat((document.getElementById('f_monto')||{}).value)||0;
+  let ids = [];
+  if(sel){ ids = sel.value==='dividido' ? cuentasMarcadas('f_quien') : [sel.value]; }
+  const sobres = listaSobres().filter(s=>s.categoria===cat.value && (s.quien==='todos' || ids.includes(s.quien)));
+  if(!sobres.length){ el.innerHTML=''; return; }
+  el.innerHTML = sobres.map(s=>{
+    const e = estadoSobre(s);
+    let parte = monto;
+    if(s.quien!=='todos' && sel){
+      const pc = sel.value==='dividido' && divCtx.f_quien ? divCtx.f_quien.exact : null;
+      parte = sel.value==='dividido' ? monto*(Number(pc && pc[s.quien])||0)/100 : monto;
+    }
+    const queda = Math.round((e.restante - parte)*100)/100;
+    return `<div class="sobre-hint sobre-${queda<0?'pasado':(e.monto>0 && (e.gastado+parte)/e.monto>=0.85?'ojo':'bien')}">
+      ✉️ ${esc(nombreQuienSobre(s.quien))}: ${monto>0
+        ? (queda>=0 ? `con este gasto quedan <b>${q(queda)}</b> de ${q(e.monto)}` : `con este gasto <b>se pasa por ${q(-queda)}</b>`)
+        : (e.restante>=0 ? `quedan <b>${q(e.restante)}</b> de ${q(e.monto)} este mes` : `ya se pasó por <b>${q(-e.restante)}</b>`)}
+    </div>`;
+  }).join('');
+}
+['change','input'].forEach(tipo=>document.addEventListener(tipo, e=>{
+  const id = e.target && e.target.id || '';
+  if(id==='f_cat' || id==='f_monto' || id.startsWith('f_quien')) setTimeout(pintarPistaSobre, 0);
+}));
+
+// ================= HOY PUEDES GASTAR =================
+// Libre real = disponible − tarjeta por pagar (lo que ya está comprometido).
+// Presupuesto de hoy = (libre real + lo gastado hoy) ÷ días que faltan del mes; lo que queda hoy = presupuesto − gastado hoy.
+// "Gastado hoy" no incluye lo que ya estaba apartado (planes, suscripciones) ni el pago de la tarjeta.
+function gastadoHoyCuenta(id){
+  const hoy = hoyISO();
+  const g = gastos.filter(x=>x.fecha===hoy && !esTransfer(x) && !x.vinculoPlanId
+      && !['tarjeta','suscripcion','plan-parcial','reembolso'].includes(x.origen))
+    .reduce((t,x)=>t+parteDe(x.quienPaga, x.division, x.monto, id, x.porcentajes),0);
+  const t = tarjetaGastos.filter(x=>x.fecha===hoy && !x.vinculoPlanId)
+    .reduce((s,x)=>s+parteDe(x.quien, x.division, x.monto, id, x.porcentajes),0);
+  return Math.round((g+t)*100)/100;
+}
+function hoyCuenta(id){
+  const libreReal = Math.round((calcularSaldo(id).disponible - calcularTarjetaPendienteSinPlan(id))*100)/100;
+  const dias = diasRestantesMes();
+  const gastadoHoy = gastadoHoyCuenta(id);
+  const presupuesto = Math.max(0, (libreReal + gastadoHoy) / dias);
+  return { libreReal, dias, gastadoHoy, presupuesto, quedaHoy: Math.round((presupuesto - gastadoHoy)*100)/100 };
+}
+function fraseDelMes(){
+  const apretados = cuentas.filter(c=>hoyCuenta(c.id).libreReal<=0);
+  if(apretados.length) return `😬 Vamos apretados: ${apretados.map(c=>esc(c.nombre)).join(' y ')} ya no ${apretados.length>1?'tienen':'tiene'} libre si se paga la tarjeta.`;
+  const estados = listaSobres().filter(s=>s.quien==='todos' || cuentaPorId(s.quien)).map(s=>({ s, e:estadoSobre(s) }));
+  const pasado = estados.filter(x=>x.e.nivel==='pasado').sort((a,b)=>b.e.pct-a.e.pct)[0];
+  if(pasado) return `⚠️ ${esc(pasado.s.categoria)} ya se pasó del sobre${pasado.s.quien==='todos'?'':' de '+esc(nombreCuenta(pasado.s.quien))}.`;
+  const ojo = estados.filter(x=>x.e.nivel==='ojo').sort((a,b)=>b.e.pct-a.e.pct)[0];
+  if(ojo) return `👀 Ojo con ${esc(ojo.s.categoria)}: va en ${Math.round(ojo.e.pct)}% del sobre.`;
+  return '🐢 Vamos bien este mes.';
+}
+function renderHoy(){
+  const cont = document.getElementById('hoyHero'); if(!cont || !cuentas.length) return;
+  const tarjetas = cuentas.map(c=>{
+    const h = hoyCuenta(c.id);
+    if(h.libreReal<=0) return `
+      <div class="hoy-card" style="${fondoCuenta(c.id)}">
+        <div class="hoy-nombre">${esc(c.nombre)}</div>
+        <div class="hoy-lbl">Hoy, mejor no gastar</div>
+        <div class="hoy-num num" style="color:var(--danger)">${q(0)}</div>
+        <div class="hoy-sub">Faltan <b>${q(-h.libreReal)}</b> para cubrir tarjeta, planes y subs</div>
+      </div>`;
+    const usado = h.presupuesto>0 ? Math.min(100, h.gastadoHoy/h.presupuesto*100) : 0;
+    return `
+      <div class="hoy-card" style="${fondoCuenta(c.id)}">
+        <div class="hoy-nombre">${esc(c.nombre)}</div>
+        <div class="hoy-lbl">Hoy puedes gastar</div>
+        <div class="hoy-num num ${h.quedaHoy<0?'neg':''}">${q(Math.max(0,h.quedaHoy))}</div>
+        <div class="hoy-barra"><span style="width:${usado}%; ${h.quedaHoy<0?'background:var(--danger)':''}"></span></div>
+        <div class="hoy-sub">${h.gastadoHoy>0
+          ? (h.quedaHoy<0 ? `Hoy te pasaste por <b>${q(-h.quedaHoy)}</b>` : `Ya gastaste ${q(h.gastadoHoy)} de ${q(h.presupuesto)}`)
+          : `${q(h.libreReal)} libres para ${h.dias} día${h.dias===1?'':'s'}`}</div>
+      </div>`;
+  }).join('');
+  cont.innerHTML = `
+    <div class="hoy-frase">${fraseDelMes()}</div>
+    <div class="balance-grid" style="margin-bottom:6px;">${tarjetas}</div>
+    ${ayuda('Es lo que cada uno puede gastar hoy para llegar a fin de mes sin descuadrarse. Se toma lo libre (ya sin planes ni suscripciones pendientes), se le resta lo que falta pagar de la tarjeta y se divide entre los días que quedan del mes. Si hoy gastas menos, mañana el número sube; si gastas más, baja. Lo que ya estaba apartado (pagar un plan, debitar una suscripción o la tarjeta) no cuenta como gasto de hoy.', '¿Cómo se calcula?')}`;
 }
 </script>
 </body>
