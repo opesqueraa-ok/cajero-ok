@@ -89,6 +89,27 @@
   .div-monto{ min-width:78px; text-align:right; font-size:13px; color:var(--text-soft); }
   .div-nota{ font-size:12px; font-weight:600; color:var(--text-soft); margin-top:6px; line-height:1.45; }
   .bc-editable{ cursor:pointer; border-radius:10px; }
+  /* Cuadrar */
+  .cq-resumen{ display:grid; grid-template-columns:1fr 1fr; gap:10px; position:sticky; top:-24px; z-index:2; padding:8px 0; background:var(--bg); }
+  .cq-resumen > :last-child:nth-child(odd){ grid-column:1 / -1; }
+  .cq-cuenta{ border-radius:14px; padding:10px 12px; box-shadow:var(--shadow-sm); font-size:12.5px; min-width:0; }
+  .cq-nombre{ font-weight:700; font-size:13.5px; margin-bottom:4px; }
+  .cq-linea{ display:flex; justify-content:space-between; gap:6px; color:var(--text-soft); font-weight:600; flex-wrap:wrap; }
+  .cq-linea b{ color:var(--text); }
+  .cq-estado{ margin-top:6px; font-weight:700; line-height:1.35; }
+  .cq-estado small{ display:block; font-weight:600; color:var(--text-soft); font-size:11px; }
+  .cq-ok{ color:var(--ok); } .cq-mal{ color:var(--warn-fg); } .cq-pend{ color:var(--text-soft); font-weight:600; }
+  .cq-item{ background:var(--card); border-radius:14px; padding:10px 12px; margin-bottom:10px; box-shadow:var(--shadow-sm); }
+  .cq-item-top{ display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+  .cq-grid{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .cq-item label{ display:flex; flex-direction:column; gap:4px; font-size:11.5px; font-weight:700; color:var(--text-soft); min-width:0; }
+  .cq-full{ margin-bottom:8px; }
+  .cq-item input, .cq-item select{ width:100%; min-width:0; padding:9px 10px; border:1.5px solid var(--line); border-radius:10px; background:var(--input-bg); color:var(--text);
+    font-family:'Quicksand',sans-serif; font-size:16px; font-weight:500; box-sizing:border-box; -webkit-appearance:none; appearance:none; }
+  .cq-nota{ display:block; margin-top:8px; font-size:11.5px; font-weight:600; color:var(--text-soft); line-height:1.4; }
+  .cq-subs{ background:var(--card); border-radius:14px; padding:10px 12px; box-shadow:var(--shadow-sm); display:flex; flex-wrap:wrap; gap:6px; }
+  .cq-subs .chip{ border:none; font-family:'Quicksand',sans-serif; }
+  .btn:disabled{ opacity:.45; cursor:default; }
   /* Hoy puedes gastar */
   .hoy-frase{ font-size:14px; font-weight:700; margin:0 0 12px; line-height:1.4; }
   .hoy-card{ border-radius:var(--radius); padding:18px 16px; box-shadow:var(--shadow-md); min-width:0; }
@@ -527,6 +548,7 @@
         </div></details>
         <div id="tarjetaResumen"></div>
         <div id="tarjetaList"></div>
+        <div id="tarjetaProgramados"></div>
         <div class="section-title"><h2 style="font-size:15px;">Historial de pagos</h2></div>
         <div id="tarjetaHistorial"></div>
       </div>
@@ -567,7 +589,8 @@
         <button class="btn btn-ghost btn-small" onclick="abrirSobres()">✏️ Editar</button></div>
       <div id="sobresList"></div>
 
-      <div class="section-title"><h2>Panorama</h2></div>
+      <div class="section-title"><h2>Panorama</h2>
+        <button class="btn btn-ghost btn-small" onclick="abrirCuadre()">⚖️ Cuadrar</button></div>
       <div class="balance-grid" id="visualBalance"></div>
       <div id="visualMutuo"></div>
       <div class="fact-grid" id="factGrid"></div>
@@ -1350,7 +1373,7 @@ function tarjetaSaldoHTML(id){
   return `
     <div class="balance-card" style="${fondoCuenta(id)}">
       <div class="name">${esc(nombreCuenta(id))}</div>
-      <div class="bc-block bc-editable" onclick="abrirAjusteSaldo('${id}')" title="Toca para ajustar al saldo real">
+      <div class="bc-block bc-editable" onclick="abrirCuadre()" title="Toca para cuadrar con el banco">
         <div class="lbl">Total que hay ✏️</div>
         <div class="big num ${total<0?'neg':''}">${q(total)}</div>
       </div>
@@ -2386,11 +2409,14 @@ function fechaPagoDe(fechaISO){
   return new Date(anio, mes, diaPago()).toLocaleDateString('es-GT',{day:'2-digit',month:'short',year:'numeric'});
 }
 function calcularTarjetaPendienteSinPlan(id){
-  return tarjetaGastos.filter(g=>!g.pagado && !g.vinculoPlanId)
+  const hoy = hoyISO();
+  return tarjetaGastos.filter(g=>!g.pagado && !g.vinculoPlanId && (g.fecha||'')<=hoy)
     .reduce((s,g)=>s+parteDe(g.quien, g.division, g.monto, id, g.porcentajes),0);
 }
 function renderTarjeta(){
-  const activos = tarjetaGastos.filter(g=>!g.pagado);
+  const hoyT = hoyISO();
+  const activos = tarjetaGastos.filter(g=>!g.pagado && (g.fecha||'')<=hoyT);
+  renderProgramadosTC(tarjetaGastos.filter(g=>!g.pagado && (g.fecha||'')>hoyT));
   const grupos = {};
   activos.forEach(g=>{
     const p = periodoCorte(g.fecha);
@@ -2488,7 +2514,7 @@ function renderTarjeta(){
 }
 function togglePendienteTarjeta(id, pendiente){ col('tarjeta_gastos').doc(id).update({ pendienteProceso: pendiente }); }
 function debitarPeriodoTarjeta(label){
-  const items = tarjetaGastos.filter(g => !g.pagado && !g.pendienteProceso && periodoCorte(g.fecha).label === label);
+  const items = tarjetaGastos.filter(g => !g.pagado && !g.pendienteProceso && (g.fecha||'')<=hoyISO() && periodoCorte(g.fecha).label === label);
   if(items.length===0){ alert("Este corte todavía no tiene compras confirmadas. Marca como '✅ Ya procesó' las que ya aparecen en el banco."); return; }
   const total = items.reduce((s,g)=>s+Number(g.monto||0),0);
   if(!confirm(`¿Debitar ${q(total)} del corte "${label}"? Se crea el gasto real de cada cuenta y el corte queda guardado en el historial.`)) return;
@@ -3137,10 +3163,20 @@ function openAddModal(){
       <div class="field"><label>Descripción</label><input id="f_desc" placeholder="Ej. Súper, compra en línea..."></div>
       <div class="field"><label>Monto (Q)</label><input id="f_monto" type="number" step="0.01" inputmode="decimal" placeholder="0.00"></div>
       <div class="field"><label>Fecha</label><input id="f_fecha" type="date" value="${hoyISO()}"></div>
+      <div class="field-check"><input type="checkbox" id="f_esCuotas" onchange="toggleCuotasTC()"><label for="f_esCuotas">📆 Es a cuotas (se cobra varios meses)</label></div>
+      <div id="cuotasTC" style="display:none;">
+        <div class="aj-fila" style="gap:12px; margin-bottom:16px;">
+          <div class="field" style="flex:1; margin:0;"><label>Número de cuotas</label><input id="f_nCuotas" type="number" min="2" max="72" step="1" inputmode="numeric" value="12" oninput="previewCuotasTC()"></div>
+          <div class="field" style="flex:1; margin:0;"><label>Vas en la cuota</label><input id="f_cuotaIni" type="number" min="1" step="1" inputmode="numeric" value="1" oninput="previewCuotasTC()"></div>
+        </div>
+        <div class="field"><label>El monto que escribiste es</label>
+          <select id="f_montoEs" onchange="previewCuotasTC()"><option value="cuota">De cada cuota</option><option value="total">El total de la compra</option></select></div>
+        <div class="ocr-estado" id="cuotasTCprev" style="margin:-6px 0 16px;"></div>
+      </div>
       <div class="field"><label>¿A qué cuenta le toca pagarla?</label>${selectorQuien('f_quien', ultimaCuenta(), null, true)}</div>
       <div class="field"><label>Categoría</label><select id="f_cat">${opcionesCategoria(CATEGORIAS, null)}</select></div>
       <div id="sobreHint"></div>
-      <div class="field"><label>¿Cumple algún plan? (opcional)</label>
+      <div class="field" id="campoPlanTC"><label>¿Cumple algún plan? (opcional)</label>
         <select id="f_plan"><option value="">No</option>
           ${planesAbiertos.map(p=>`<option value="${p.id}">${esc(p.concepto)} (${esc(nombreCuenta(p.persona))}) — ${q(p.monto)}</option>`).join("")}
         </select></div>
@@ -3248,6 +3284,8 @@ function guardarPlanCuotas(){
   closeModal();
 }
 function guardarTarjetaGasto(){
+  const chkCuotas = document.getElementById('f_esCuotas');
+  if(chkCuotas && chkCuotas.checked) return guardarCuotasTC();
   const descripcion=document.getElementById('f_desc').value.trim();
   const monto=parseFloat(document.getElementById('f_monto').value);
   const fecha=document.getElementById('f_fecha').value;
@@ -4098,8 +4136,6 @@ function hoyCuenta(id){
   return { libreReal, dias, gastadoHoy, presupuesto, quedaHoy: Math.round((presupuesto - gastadoHoy)*100)/100 };
 }
 function fraseDelMes(){
-  const apretados = cuentas.filter(c=>hoyCuenta(c.id).libreReal<=0);
-  if(apretados.length) return `😬 Vamos apretados: ${apretados.map(c=>esc(c.nombre)).join(' y ')} ya no ${apretados.length>1?'tienen':'tiene'} libre si se paga la tarjeta.`;
   const estados = listaSobres().filter(s=>s.quien==='todos' || cuentaPorId(s.quien)).map(s=>({ s, e:estadoSobre(s) }));
   const pasado = estados.filter(x=>x.e.nivel==='pasado').sort((a,b)=>b.e.pct-a.e.pct)[0];
   if(pasado) return `⚠️ ${esc(pasado.s.categoria)} ya se pasó del sobre${pasado.s.quien==='todos'?'':' de '+esc(nombreCuenta(pasado.s.quien))}.`;
@@ -4134,6 +4170,301 @@ function renderHoy(){
     <div class="hoy-frase">${fraseDelMes()}</div>
     <div class="balance-grid" style="margin-bottom:6px;">${tarjetas}</div>
     ${ayuda('Es lo que cada uno puede gastar hoy para llegar a fin de mes sin descuadrarse. Se toma lo libre (ya sin planes ni suscripciones pendientes), se le resta lo que falta pagar de la tarjeta y se divide entre los días que quedan del mes. Si hoy gastas menos, mañana el número sube; si gastas más, baja. Lo que ya estaba apartado (pagar un plan, debitar una suscripción o la tarjeta) no cuenta como gasto de hoy.', '¿Cómo se calcula?')}`;
+}
+
+// ================= CUADRAR CON EL BANCO =================
+// Se escribe cuánto hay de verdad en cada cuenta y se van agregando los movimientos que faltaba anotar.
+// Todo es un borrador: se ve cómo cambia la diferencia y nada se guarda hasta "Guardar todo".
+// El borrador se guarda en este celular por si se cierra la ventana.
+let cq = null;
+function cqKey(){ return 'caparados_cuadre_' + (currentUser ? currentUser.uid : ''); }
+function cqGuardarLocal(){ try{ localStorage.setItem(cqKey(), JSON.stringify(cq)); }catch(e){} }
+function cqBorrarLocal(){ try{ localStorage.removeItem(cqKey()); }catch(e){} }
+function abrirCuadre(){
+  let previo = null;
+  try{ previo = JSON.parse(localStorage.getItem(cqKey())||'null'); }catch(e){}
+  cq = (previo && Array.isArray(previo.items)) ? previo : { reales:{}, inclAhorro:{}, ajustar:{}, items:[] };
+  document.getElementById('modalTitle').textContent = "⚖️ Cuadrar con el banco";
+  renderCuadre();
+  document.getElementById('modalOverlay').classList.add('active');
+}
+function cqNuevo(tipo, extra){
+  const base = { id:'i'+Date.now().toString(36)+Math.random().toString(36).slice(2,5), tipo, fecha:hoyISO(), monto:'' };
+  const c0 = ultimaCuenta() || (cuentas[0]&&cuentas[0].id);
+  const c1 = (cuentas.find(c=>c.id!==c0)||cuentas[0]||{}).id;
+  if(tipo==='gasto') Object.assign(base, { descripcion:'', categoria:CATEGORIAS[0], duenio:c0, pagador:c0 });
+  if(tipo==='ingreso') Object.assign(base, { descripcion:'', categoria:CATEGORIAS_INGRESO[0], cuenta:c0 });
+  if(tipo==='transfer') Object.assign(base, { motivo:'', desde:c0, hacia:c1 });
+  Object.assign(base, extra||{});
+  cq.items.push(base);
+  cqGuardarLocal(); renderCuadre();
+}
+function cqAgregarSub(subId){
+  const s = suscripciones.find(x=>x.id===subId); if(!s) return;
+  cqNuevo('sub', { subId, monto:Number(s.monto)||0, descripcion:s.servicio+' (suscripción)' });
+}
+function cqQuitar(id){ cq.items = cq.items.filter(x=>x.id!==id); cqGuardarLocal(); renderCuadre(); }
+function cqSet(id, campo, valor, repintar){
+  const it = cq.items.find(x=>x.id===id); if(!it) return;
+  it[campo] = valor;
+  cqGuardarLocal();
+  if(repintar) renderCuadre(); else pintarResumenCuadre();
+}
+function cqSetReal(cuenta, valor){ cq.reales[cuenta] = valor; cqGuardarLocal(); pintarResumenCuadre(); }
+function cqSetFlag(campo, cuenta, valor){ cq[campo][cuenta] = valor; cqGuardarLocal(); pintarResumenCuadre(); }
+// Cómo cambia el "Total que hay" de cada cuenta con un movimiento del borrador.
+function cqEfectos(it){
+  const m = Number(it.monto)||0, ef = {};
+  const sumar = (id, v)=>{ if(id) ef[id] = (ef[id]||0) + v; };
+  if(it.tipo==='gasto'){ sumar(it.pagador || it.duenio, -m); }
+  else if(it.tipo==='ingreso'){ sumar(it.cuenta, m); }
+  else if(it.tipo==='transfer'){ if(it.desde!==it.hacia){ sumar(it.desde, -m); sumar(it.hacia, m); } }
+  else if(it.tipo==='sub'){
+    const s = suscripciones.find(x=>x.id===it.subId);
+    if(s) participantes(s.quienPaga, s.division).forEach(id=>sumar(id, -parteDe(s.quienPaga, s.division, m, id, s.porcentajes)));
+  }
+  return ef;
+}
+function cqCalcular(){
+  return cuentas.map(c=>{
+    const s = calcularSaldo(c.id);
+    const efecto = cq.items.reduce((t,it)=>t+(cqEfectos(it)[c.id]||0), 0);
+    const despues = Math.round((s.total + efecto)*100)/100;
+    const realTxt = cq.reales[c.id];
+    const hayReal = realTxt!=null && realTxt!=='' && !isNaN(parseFloat(realTxt));
+    const real = hayReal ? parseFloat(realTxt) - (cq.inclAhorro[c.id] ? s.saldoAhorro : 0) : null;
+    const dif = hayReal ? Math.round((real - despues)*100)/100 : null;
+    return { id:c.id, antes:s.total, efecto:Math.round(efecto*100)/100, despues, real, dif, saldoAhorro:s.saldoAhorro };
+  });
+}
+function pintarResumenCuadre(){
+  const el = document.getElementById('cuadreResumen'); if(!el) return;
+  const filas = cqCalcular();
+  el.innerHTML = filas.map(f=>{
+    let estado = '<span class="cq-pend">Escribe cuánto hay en el banco</span>';
+    if(f.dif!=null){
+      estado = Math.abs(f.dif)<0.01 ? '<span class="cq-ok">✓ Cuadra</span>'
+        : f.dif>0 ? `<span class="cq-mal">Hay <b>${q(f.dif)}</b> de más en el banco</span><small>Falta anotar un ingreso, o sobra un gasto</small>`
+        : `<span class="cq-mal">Faltan <b>${q(-f.dif)}</b> en el banco</span><small>Falta anotar un gasto, o sobra un ingreso</small>`;
+    }
+    return `<div class="cq-cuenta" style="${fondoCuenta(f.id)}">
+      <div class="cq-nombre">${esc(nombreCuenta(f.id))}</div>
+      <div class="cq-linea"><span>En la app</span><span class="num">${q(f.antes)}${Math.abs(f.efecto)>=0.01?` → <b>${q(f.despues)}</b>`:''}</span></div>
+      <div class="cq-linea"><span>En el banco</span><span class="num">${f.real!=null?q(f.real):'—'}</span></div>
+      <div class="cq-estado">${estado}</div>
+    </div>`;
+  }).join('');
+  const n = cq.items.length;
+  const pend = filas.filter(f=>f.dif!=null && Math.abs(f.dif)>=0.01);
+  const aj = document.getElementById('cuadreAjustes');
+  if(aj) aj.innerHTML = pend.map(f=>`<div class="field-check"><input type="checkbox" id="cq_aj_${f.id}" ${cq.ajustar[f.id]?'checked':''} onchange="cqSetFlag('ajustar','${f.id}',this.checked)">
+      <label for="cq_aj_${f.id}">Anotar la diferencia que queda en ${esc(nombreCuenta(f.id))} (${q(f.dif)}) como ajuste de saldo</label></div>`).join('');
+  const btn = document.getElementById('cuadreGuardar');
+  const nAj = pend.filter(f=>cq.ajustar[f.id]).length;
+  if(btn){ btn.disabled = !(n||nAj); btn.textContent = `Guardar todo${n?` (${n} movimiento${n===1?'':'s'})`:''}${nAj?` + ${nAj} ajuste${nAj===1?'':'s'}`:''}`; }
+}
+function cqSelCuenta(itemId, campo, valor){
+  return `<select onchange="cqSet('${itemId}','${campo}',this.value)">${cuentas.map(c=>`<option value="${c.id}" ${c.id===valor?'selected':''}>${esc(c.nombre)}</option>`).join('')}</select>`;
+}
+function cqItemHTML(it){
+  const quitar = `<button class="btn btn-ghost btn-small" onclick="cqQuitar('${it.id}')" aria-label="Quitar">🗑️</button>`;
+  const monto = `<input type="number" step="0.01" inputmode="decimal" placeholder="0.00" value="${it.monto}" oninput="cqSet('${it.id}','monto',this.value)">`;
+  const fecha = `<input type="date" value="${it.fecha}" onchange="cqSet('${it.id}','fecha',this.value)">`;
+  if(it.tipo==='sub'){
+    const s = suscripciones.find(x=>x.id===it.subId);
+    return `<div class="cq-item"><div class="cq-item-top"><b>🔁 ${esc(s?s.servicio:'Suscripción')}</b>${quitar}</div>
+      <div class="cq-grid"><label>Monto Q${monto}</label><label>Fecha${fecha}</label></div>
+      <small class="cq-nota">${s?esc(etiquetaQuien(s.quienPaga, s.division, s.porcentajes)):''} · se marca como debitada</small></div>`;
+  }
+  if(it.tipo==='transfer') return `<div class="cq-item"><div class="cq-item-top"><b>↔️ Transferencia</b>${quitar}</div>
+      <div class="cq-grid"><label>Desde${cqSelCuenta(it.id,'desde',it.desde)}</label><label>Hacia${cqSelCuenta(it.id,'hacia',it.hacia)}</label>
+      <label>Monto Q${monto}</label><label>Fecha${fecha}</label></div>
+      <label class="cq-full">Motivo (opcional)<input value="${esc(it.motivo)}" placeholder="Ej. Le devolví lo del súper" onchange="cqSet('${it.id}','motivo',this.value)"></label></div>`;
+  if(it.tipo==='ingreso') return `<div class="cq-item"><div class="cq-item-top"><b>💵 Ingreso</b>${quitar}</div>
+      <label class="cq-full">Descripción<input value="${esc(it.descripcion)}" placeholder="Ej. Me pagaron" onchange="cqSet('${it.id}','descripcion',this.value)"></label>
+      <div class="cq-grid"><label>Monto Q${monto}</label><label>Fecha${fecha}</label>
+      <label>¿A qué cuenta?${cqSelCuenta(it.id,'cuenta',it.cuenta)}</label>
+      <label>Categoría<select onchange="cqSet('${it.id}','categoria',this.value)">${opcionesCategoria(CATEGORIAS_INGRESO, it.categoria)}</select></label></div></div>`;
+  const otro = it.pagador && it.pagador!==it.duenio;
+  return `<div class="cq-item"><div class="cq-item-top"><b>🧾 Gasto</b>${quitar}</div>
+      <label class="cq-full">Descripción<input value="${esc(it.descripcion)}" placeholder="Ej. Gasolina" onchange="cqSet('${it.id}','descripcion',this.value)"></label>
+      <div class="cq-grid"><label>Monto Q${monto}</label><label>Fecha${fecha}</label>
+      <label>¿De quién es?<select onchange="cqSet('${it.id}','duenio',this.value,true)">${cuentas.map(c=>`<option value="${c.id}" ${c.id===it.duenio?'selected':''}>${esc(c.nombre)}</option>`).join('')}</select></label>
+      <label>¿De qué cuenta salió?<select onchange="cqSet('${it.id}','pagador',this.value,true)">${cuentas.map(c=>`<option value="${c.id}" ${c.id===(it.pagador||it.duenio)?'selected':''}>${esc(c.nombre)}</option>`).join('')}</select></label></div>
+      <label class="cq-full">Categoría<select onchange="cqSet('${it.id}','categoria',this.value)">${opcionesCategoria(CATEGORIAS, it.categoria)}</select></label>
+      ${otro?`<small class="cq-nota">Se paga con la cuenta de ${esc(nombreCuenta(it.pagador))}, pero el gasto es de ${esc(nombreCuenta(it.duenio))}: ${esc(nombreCuenta(it.duenio))} le queda debiendo ese monto. Cuando se lo pase, anótalo como transferencia.</small>`:''}</div>`;
+}
+function renderCuadre(){
+  const body = document.getElementById('modalBody'); if(!body || !cq) return;
+  const scroll = body.parentElement ? body.parentElement.scrollTop : 0;
+  const yaEnBorrador = new Set(cq.items.filter(x=>x.tipo==='sub').map(x=>x.subId));
+  const subsPend = suscripciones.filter(s=>subPendienteMes(s) && !yaEnBorrador.has(s.id));
+  body.innerHTML = `
+    ${ayuda('1) Escribe cuánto hay de verdad en el banco de cada cuenta. 2) Agrega lo que faltaba anotar: gastos, ingresos, transferencias o suscripciones que ya se cobraron. Arriba ves cómo se mueve la diferencia con cada cosa. 3) Cuando cuadre, toca "Guardar todo". Nada se anota antes. Si cierras esta ventana, tu borrador se queda guardado en este celular. Las compras con tarjeta de crédito no salen del banco: esas se anotan en Pagos → Tarjeta.', '¿Cómo funciona?')}
+    <div class="cq-reales">${cuentas.map(c=>{
+      const ah = calcularSaldo(c.id).saldoAhorro;
+      return `<div class="field" style="margin-bottom:8px;"><label>Banco de ${esc(c.nombre)} (Q)</label>
+        <input type="number" step="0.01" inputmode="decimal" placeholder="¿Cuánto hay?" value="${cq.reales[c.id]??''}" oninput="cqSetReal('${c.id}', this.value)">
+        ${ah>0.004?`<div class="field-check" style="margin:6px 0 0;"><input type="checkbox" id="cq_ah_${c.id}" ${cq.inclAhorro[c.id]?'checked':''} onchange="cqSetFlag('inclAhorro','${c.id}',this.checked)"><label for="cq_ah_${c.id}">Ese monto incluye lo ahorrado (${q(ah)})</label></div>`:''}
+      </div>`;
+    }).join('')}</div>
+    <div id="cuadreResumen" class="cq-resumen"></div>
+
+    <div class="section-title" style="margin-top:14px;"><h2 style="font-size:16px;">Lo que faltaba anotar</h2></div>
+    ${cq.items.length ? cq.items.map(cqItemHTML).join('') : '<p class="hint" style="margin:0 0 12px;">Todavía no agregas nada.</p>'}
+    <div class="actions-row" style="margin-bottom:12px;">
+      <button class="btn btn-ghost btn-small" onclick="cqNuevo('gasto')">＋ Gasto</button>
+      <button class="btn btn-ghost btn-small" onclick="cqNuevo('ingreso')">＋ Ingreso</button>
+      ${cuentas.length>1?`<button class="btn btn-ghost btn-small" onclick="cqNuevo('transfer')">＋ Transferencia</button>`:''}
+    </div>
+    ${subsPend.length?`<div class="cq-subs"><div class="aj-mini" style="margin-bottom:6px;">¿Ya se cobró alguna suscripción?</div>
+      ${subsPend.map(s=>`<button class="chip" onclick="cqAgregarSub('${s.id}')">＋ ${esc(s.servicio)} · ${q(s.monto)}</button>`).join('')}</div>`:''}
+
+    <div id="cuadreAjustes" style="margin-top:14px;"></div>
+    <button class="btn btn-primary" id="cuadreGuardar" onclick="guardarCuadre()">Guardar todo</button>
+    ${cq.items.length?`<button class="btn btn-ghost" style="width:100%; margin-top:8px;" onclick="if(confirm('¿Borrar todo el borrador?')){ cq.items=[]; cqGuardarLocal(); renderCuadre(); }">Empezar de cero</button>`:''}`;
+  pintarResumenCuadre();
+  if(body.parentElement) body.parentElement.scrollTop = scroll;
+}
+function cqTransferBatch(batch, d){
+  const t = textosTransfer({ desde:d.desde, hacia:d.hacia, motivo:d.motivo||'', categoria:CAT_TRANSFER });
+  const gRef = col('gastos').doc(), iRef = col('ingresos').doc(), rRef = col('reembolsos').doc();
+  batch.set(gRef, { fecha:d.fecha, descripcion:t.gasto, monto:d.monto, quienPaga:d.desde, division:null, porcentajes:null,
+    categoria:CAT_TRANSFER, capa:'Pareja', origen:'reembolso', reembolsoId:rRef.id, createdAt: FieldValue.serverTimestamp() });
+  batch.set(iRef, { fecha:d.fecha, descripcion:t.ingreso, monto:d.monto, persona:d.hacia,
+    categoria:t.catIngreso, origen:'reembolso', reembolsoId:rRef.id, createdAt: FieldValue.serverTimestamp() });
+  batch.set(rRef, { fecha:d.fecha, pagador:d.desde, beneficiario:d.hacia, monto:d.monto, categoria:CAT_TRANSFER, motivo:d.motivo||'',
+    gastoId:gRef.id, ingresoId:iRef.id, createdAt: FieldValue.serverTimestamp() });
+}
+function guardarCuadre(){
+  if(!cq) return;
+  const items = cq.items.map(it=>({ ...it, monto:Math.round((parseFloat(it.monto)||0)*100)/100 }));
+  const malos = items.filter(it=>it.monto<=0 || !it.fecha || (it.tipo==='transfer' && it.desde===it.hacia));
+  if(malos.length){ alert(`Hay ${malos.length} movimiento(s) sin monto, sin fecha o con la misma cuenta de origen y destino. Corrígelos o quítalos.`); return; }
+  const filas = cqCalcular();
+  const ajustes = filas.filter(f=>f.dif!=null && Math.abs(f.dif)>=0.01 && cq.ajustar[f.id]);
+  if(!items.length && !ajustes.length) return;
+  if(!confirm(`Se van a guardar ${items.length} movimiento(s)${ajustes.length?` y ${ajustes.length} ajuste(s) de saldo`:''}. ¿Continuar?`)) return;
+  const batch = db.batch(), ts = ()=>FieldValue.serverTimestamp();
+  items.forEach(it=>{
+    if(it.tipo==='gasto'){
+      batch.set(col('gastos').doc(), { descripcion:it.descripcion||'', monto:it.monto, fecha:it.fecha, quienPaga:it.duenio, division:null, porcentajes:null,
+        categoria:it.categoria, capa:'Personal', createdAt:ts() });
+      if(it.pagador && it.pagador!==it.duenio)
+        cqTransferBatch(batch, { desde:it.pagador, hacia:it.duenio, monto:it.monto, fecha:it.fecha,
+          motivo:`Pagó ${nombreCuenta(it.pagador)}: ${it.descripcion||'gasto'}` });
+    } else if(it.tipo==='ingreso'){
+      batch.set(col('ingresos').doc(), { descripcion:it.descripcion||'', monto:it.monto, fecha:it.fecha, persona:it.cuenta, categoria:it.categoria, createdAt:ts() });
+    } else if(it.tipo==='transfer'){
+      cqTransferBatch(batch, it);
+    } else if(it.tipo==='sub'){
+      const s = suscripciones.find(x=>x.id===it.subId); if(!s) return;
+      batch.set(col('gastos').doc(), { fecha:it.fecha, descripcion:s.servicio+' (suscripción)', monto:it.monto,
+        quienPaga:s.quienPaga, division:s.division||null, porcentajes:s.porcentajes||null, categoria:s.categoria||"🔁 Suscripciones", capa:'Pareja',
+        origen:'suscripcion', subscripcionId:s.id, createdAt:ts() });
+      batch.update(col('suscripciones').doc(s.id), { ultimoDebito:it.fecha });
+    }
+  });
+  ajustes.forEach(f=>{
+    const base = { descripcion:'Ajuste de saldo: cuadre con el banco', monto:Math.abs(f.dif), fecha:hoyISO(), categoria:CAT_AJUSTE, origen:'ajuste', createdAt:ts() };
+    if(f.dif>0) batch.set(col('ingresos').doc(), { ...base, persona:f.id });
+    else batch.set(col('gastos').doc(), { ...base, quienPaga:f.id, division:null, porcentajes:null, capa:'Personal' });
+  });
+  batch.commit().then(()=>{ cqBorrarLocal(); cq = null; closeModal(); }).catch(e=>alert("No se pudo guardar: "+e.message));
+}
+
+// ================= CUOTAS EN LA TARJETA =================
+// Una compra a cuotas se anota como varios cargos, uno por mes en el mismo día.
+// Los que todavía no llegan quedan "programados": no cuentan en lo que se debe ni en los sobres hasta su fecha.
+function sumarMeses(fechaISO, n){
+  const [a,m,d] = fechaISO.split('-').map(Number);
+  const ult = new Date(a, m-1+n+1, 0).getDate();
+  return ocrISO(new Date(a, m-1+n, Math.min(d, ult)));
+}
+function cuotasTCcalc(){
+  const total = Math.max(2, Math.min(72, parseInt(document.getElementById('f_nCuotas').value)||0));
+  const ini = Math.max(1, Math.min(total, parseInt(document.getElementById('f_cuotaIni').value)||1));
+  const monto = parseFloat(document.getElementById('f_monto').value)||0;
+  const fecha = document.getElementById('f_fecha').value || hoyISO();
+  const esTotal = document.getElementById('f_montoEs').value==='total';
+  const base = esTotal ? Math.floor(monto/total*100)/100 : monto;
+  const lista = [];
+  for(let i=ini; i<=total; i++){
+    const m = esTotal && i===total ? Math.round((monto - base*(total-1))*100)/100 : base;
+    lista.push({ num:i, fecha:sumarMeses(fecha, i-ini), monto:m });
+  }
+  return { total, ini, lista };
+}
+function toggleCuotasTC(){
+  const on = document.getElementById('f_esCuotas').checked;
+  document.getElementById('cuotasTC').style.display = on ? 'block' : 'none';
+  const plan = document.getElementById('campoPlanTC'); if(plan) plan.style.display = on ? 'none' : '';
+  const lbl = document.querySelector('label[for="f_fecha"]') || document.getElementById('f_fecha').previousElementSibling;
+  if(lbl) lbl.textContent = on ? 'Fecha del cargo de la cuota en la que vas' : 'Fecha';
+  previewCuotasTC();
+}
+function previewCuotasTC(){
+  const el = document.getElementById('cuotasTCprev'); if(!el) return;
+  const c = cuotasTCcalc();
+  if(!c.lista.length || !c.lista[0].monto){ el.innerHTML = 'Escribe el monto para ver los cargos.'; return; }
+  const primero = c.lista[0], ultimo = c.lista[c.lista.length-1];
+  const suma = c.lista.reduce((t,x)=>t+x.monto,0);
+  el.innerHTML = `Se anotan <b>${c.lista.length} cargo${c.lista.length===1?'':'s'} de ${q(primero.monto)}</b> (cuotas ${c.ini} a ${c.total}), el día ${Number(primero.fecha.slice(8,10))} de cada mes: del ${fmtFecha(primero.fecha)} al ${fmtFecha(ultimo.fecha)}. Total: ${q(suma)}. Los que todavía no llegan quedan como programados y no cuentan hasta su fecha.`;
+}
+document.addEventListener('input', e=>{ if(e.target && (e.target.id==='f_monto' || e.target.id==='f_fecha') && document.getElementById('f_esCuotas')?.checked) previewCuotasTC(); });
+document.addEventListener('change', e=>{ if(e.target && e.target.id==='f_fecha' && document.getElementById('f_esCuotas')?.checked) previewCuotasTC(); });
+function guardarCuotasTC(){
+  const descripcion = document.getElementById('f_desc').value.trim() || 'Compra a cuotas';
+  const quien = leerQuien('f_quien'); if(!quien) return;
+  const categoria = document.getElementById('f_cat').value;
+  const c = cuotasTCcalc();
+  if(!c.lista.length || !(c.lista[0].monto>0)){ alert("Falta el monto."); return; }
+  const grupo = 'cq' + Date.now().toString(36);
+  const batch = db.batch();
+  c.lista.forEach(x=>batch.set(col('tarjeta_gastos').doc(), {
+    descripcion:`${descripcion} (${x.num}/${c.total})`, monto:x.monto, fecha:x.fecha,
+    quien:quien.valor, division:quien.division, porcentajes:quien.porcentajes, categoria, vinculoPlanId:null,
+    grupoCuotas:grupo, grupoNombre:descripcion, cuotaNum:x.num, cuotaTotal:c.total, createdAt:FieldValue.serverTimestamp()
+  }));
+  batch.commit().catch(e=>alert("No se pudieron guardar las cuotas: "+e.message));
+  recordarCuenta(quien.valor);
+  closeModal();
+}
+function renderProgramadosTC(futuros){
+  const el = document.getElementById('tarjetaProgramados'); if(!el) return;
+  if(!futuros.length){ el.innerHTML=''; return; }
+  const grupos = {};
+  futuros.forEach(g=>{ const k = g.grupoCuotas || ('solo_'+g.id); (grupos[k] = grupos[k] || []).push(g); });
+  el.innerHTML = `<div class="section-title"><h2 style="font-size:15px;">📅 Cargos programados</h2></div>
+    ${ayuda('Son cuotas o cargos con fecha futura. No cuentan en lo que deben de la tarjeta, en "Hoy puedes gastar" ni en los sobres hasta que llegue su fecha; ese día pasan solos al corte que les toca.', '¿Qué son?')}
+    ${Object.entries(grupos).map(([k, items])=>{
+      items.sort((a,b)=>a.fecha<b.fecha?-1:1);
+      const p = items[0], u = items[items.length-1];
+      const total = items.reduce((t,x)=>t+Number(x.monto||0),0);
+      const nombre = p.grupoNombre || p.descripcion || '(sin descripción)';
+      const esGrupo = !!p.grupoCuotas;
+      return `<div class="receipt" style="--bar:${barBg(p.quien, p.division)}">
+        <div class="receipt-row"><div>
+          <div class="receipt-title">${esc(nombre)}</div>
+          <div class="receipt-sub">${esc(etiquetaQuien(p.quien, p.division, p.porcentajes))}${p.categoria?(' · '+esc(p.categoria)):''}</div>
+          <div class="receipt-sub">${esGrupo?`${items.length} cuota${items.length===1?'':'s'} pendiente${items.length===1?'':'s'} (${p.cuotaNum} a ${u.cuotaNum} de ${p.cuotaTotal}) · `:''}próximo cargo: <b>${fmtFecha(p.fecha)}</b>${esGrupo && items.length>1?` · último: ${fmtFecha(u.fecha)}`:''}</div>
+        </div><div class="receipt-amount num">${q(p.monto)}${esGrupo&&items.length>1?'<div class="receipt-sub" style="text-align:right;">al mes</div>':''}</div></div>
+        <details class="ayuda" style="margin:8px 0 0;"><summary>Ver fechas · total ${q(total)}</summary><div class="ayuda-txt">
+          ${items.map(x=>`${fmtFecha(x.fecha)} · ${q(x.monto)}${x.cuotaNum?` · cuota ${x.cuotaNum}/${x.cuotaTotal}`:''}`).join('<br>')}</div></details>
+        <div class="actions-row">
+          <button class="btn btn-ghost btn-small" onclick="editarTarjetaGasto('${p.id}')">✏️ Editar el próximo</button>
+          <button class="btn btn-ghost btn-small" onclick="cancelarProgramadosTC('${k}')">🗑️ ${esGrupo&&items.length>1?'Cancelar los que faltan':'Borrar'}</button>
+        </div></div>`;
+    }).join('')}`;
+}
+function cancelarProgramadosTC(k){
+  const hoy = hoyISO();
+  const items = tarjetaGastos.filter(g=>!g.pagado && (g.fecha||'')>hoy && (g.grupoCuotas ? g.grupoCuotas===k : 'solo_'+g.id===k));
+  if(!items.length) return;
+  if(!confirm(`¿Borrar ${items.length} cargo(s) programado(s)? Los que ya pasaron se quedan.`)) return;
+  const batch = db.batch();
+  items.forEach(g=>batch.delete(col('tarjeta_gastos').doc(g.id)));
+  batch.commit();
 }
 </script>
 </body>
