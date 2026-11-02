@@ -1021,7 +1021,7 @@ function detenerListeners(){
   unsubs = []; yaEscuchando = false;
   ingresos=[]; gastos=[]; planes=[]; ahorros=[]; metas=[];
   deudas=[]; cuotasPlanes=[]; cuotasPagos=[]; tarjetaGastos=[]; suscripciones=[];
-  reembolsos=[]; tarjetaPagos=[]; liquidaciones=[]; saldosIniciales={};
+  reembolsos=[]; tarjetaPagos=[]; liquidaciones=[]; tarjetaAbonos=[]; saldosIniciales={};
 }
 
 function entrarAlApp(){
@@ -1126,7 +1126,7 @@ function quitarFiltroCategoriaGasto(){
 // ================= ESTADO =================
 let ingresos=[], gastos=[], planes=[], ahorros=[], metas=[];
 let deudas=[], cuotasPlanes=[], cuotasPagos=[], tarjetaGastos=[], suscripciones=[];
-let reembolsos=[], tarjetaPagos=[], liquidaciones=[];
+let reembolsos=[], tarjetaPagos=[], liquidaciones=[], tarjetaAbonos=[];
 let saldosIniciales = {};
 
 function startListeners(){
@@ -1148,6 +1148,7 @@ function startListeners(){
   escuchar('cuotas_pagos','numero','asc', v=>cuotasPagos=v);
   escuchar('tarjeta_gastos','fecha','desc', v=>tarjetaGastos=ordenarRecientes(v));
   escuchar('tarjeta_pagos','fechaPago','desc', v=>tarjetaPagos=v);
+  escuchar('tarjeta_abonos','fecha','desc', v=>tarjetaAbonos=ordenarRecientes(v));
   escuchar('suscripciones','createdAt','desc', v=>suscripciones=v);
   escuchar('reembolsos','fecha','desc', v=>reembolsos=ordenarRecientes(v));
   escuchar('liquidaciones','createdAt','desc', v=>liquidaciones=v);
@@ -1506,6 +1507,8 @@ function renderGastos(){
     </div>`).join("");
 }
 function eliminarGasto(id){
+  const gx = gastos.find(x=>x.id===id);
+  if(gx && gx.abonoId) return deshacerAbonoTC(gx.abonoId);
   if(confirm("¿Borrar este gasto? Si viene de un plan pagado, mejor usa 'Deshacer' desde Planes."))
     col('gastos').doc(id).delete();
 }
@@ -2408,10 +2411,19 @@ function fechaPagoDe(fechaISO){
   if(mes>11){ mes=0; anio++; }
   return new Date(anio, mes, diaPago()).toLocaleDateString('es-GT',{day:'2-digit',month:'short',year:'numeric'});
 }
-function calcularTarjetaPendienteSinPlan(id){
+function calcularTarjetaBrutoSinPlan(id){
   const hoy = hoyISO();
   return tarjetaGastos.filter(g=>!g.pagado && !g.vinculoPlanId && (g.fecha||'')<=hoy)
     .reduce((s,g)=>s+parteDe(g.quien, g.division, g.monto, id, g.porcentajes),0);
+}
+// Abonos a la tarjeta: dinero que ya se pagó y todavía no se usó para cerrar un corte.
+function creditoAbonos(id){
+  const abonado = tarjetaAbonos.filter(a=>a.cuenta===id).reduce((t,a)=>t+Number(a.monto||0),0);
+  const usado = tarjetaPagos.reduce((t,p)=>t+Number((p.abonosUsados||{})[id]||0),0);
+  return Math.max(0, Math.round((abonado-usado)*100)/100);
+}
+function calcularTarjetaPendienteSinPlan(id){
+  return Math.max(0, Math.round((calcularTarjetaBrutoSinPlan(id) - creditoAbonos(id))*100)/100);
 }
 function renderTarjeta(){
   const hoyT = hoyISO();
@@ -2438,6 +2450,7 @@ function renderTarjeta(){
         <div class="bc-divider"></div>
         <div class="bc-block"><div class="lbl">Después de tarjeta</div><div class="mid num ${(disp-tarjPend)<0?'neg':''}">${q(disp-tarjPend)}</div></div>
         <div class="sub">Monto por pagar de TC: ${q(tarjPend)}</div>
+        ${creditoAbonos(c.id)>0.004?`<div class="sub">💳 Ya abonado: ${q(Math.min(creditoAbonos(c.id), calcularTarjetaBrutoSinPlan(c.id)))}${creditoAbonos(c.id)>calcularTarjetaBrutoSinPlan(c.id)+0.004?` · a favor ${q(creditoAbonos(c.id)-calcularTarjetaBrutoSinPlan(c.id))}`:''}</div>`:''}
       </div>`;
   }).join("");
 
@@ -2447,7 +2460,9 @@ function renderTarjeta(){
       <div class="name">Corte actual · ${pActual.label}</div>
       <div class="bc-block"><div class="big num">${q(totalActual)}</div>
       <div class="sub">Corte el ${diaCorte()} · pago el ${diaPago()} del mes siguiente</div></div>
-    </div>`;
+    </div>
+    <button class="btn btn-primary" style="margin-bottom:12px;" onclick="abrirAbonoTC()">💳 Abonar a la tarjeta</button>
+    ${abonosRecientesHTML()}`;
 
   const list = document.getElementById('tarjetaList');
   if(activos.length===0){
@@ -2517,16 +2532,24 @@ function debitarPeriodoTarjeta(label){
   const items = tarjetaGastos.filter(g => !g.pagado && !g.pendienteProceso && (g.fecha||'')<=hoyISO() && periodoCorte(g.fecha).label === label);
   if(items.length===0){ alert("Este corte todavía no tiene compras confirmadas. Marca como '✅ Ya procesó' las que ya aparecen en el banco."); return; }
   const total = items.reduce((s,g)=>s+Number(g.monto||0),0);
-  if(!confirm(`¿Debitar ${q(total)} del corte "${label}"? Se crea el gasto real de cada cuenta y el corte queda guardado en el historial.`)) return;
-
   const montos = {};
   items.forEach(g=>{
     participantes(g.quien, g.division).forEach(id=>{ montos[id] = (montos[id]||0) + parteDe(g.quien, g.division, g.monto, id, g.porcentajes); });
   });
   Object.keys(montos).forEach(k=>montos[k]=Math.round(montos[k]*100)/100);
+  // Lo que cada cuenta ya abonó se descuenta: solo se debita lo que falta.
+  const abonosUsados = {}, aDebitar = {};
+  Object.entries(montos).forEach(([id,m])=>{
+    const u = Math.min(creditoAbonos(id), m);
+    if(u>0) abonosUsados[id] = Math.round(u*100)/100;
+    aDebitar[id] = Math.round((m-u)*100)/100;
+  });
+  const totalAbonos = Object.values(abonosUsados).reduce((t,x)=>t+x,0);
+  const totalDebitar = Object.values(aDebitar).reduce((t,x)=>t+x,0);
+  if(!confirm(`¿Cerrar el corte "${label}" (${q(total)})?${totalAbonos>0?`\n\nYa abonaron ${q(totalAbonos)}, así que solo se debitan ${q(totalDebitar)}:\n`+Object.entries(aDebitar).map(([id,m])=>`• ${nombreCuenta(id)}: ${q(m)}${abonosUsados[id]?` (abonó ${q(abonosUsados[id])})`:''}`).join('\n'):'\n\nSe crea el gasto real de cada cuenta y el corte queda en el historial.'}`)) return;
 
   const batch = db.batch();
-  Object.entries(montos).forEach(([id, monto])=>{
+  Object.entries(aDebitar).forEach(([id, monto])=>{
     if(monto > 0){
       batch.set(col('gastos').doc(), {
         fecha: hoyISO(), descripcion: 'Pago tarjeta de crédito - ' + label,
@@ -2537,7 +2560,7 @@ function debitarPeriodoTarjeta(label){
   });
   const pagoRef = col('tarjeta_pagos').doc();
   batch.set(pagoRef, {
-    periodo: label, fechaPago: hoyISO(), total, montos,
+    periodo: label, fechaPago: hoyISO(), total, montos, abonosUsados,
     items: items.map(it=>({ descripcion: it.descripcion||'', monto: it.monto, quien: it.quien, division: it.division||null, porcentajes: it.porcentajes||null, categoria: it.categoria||'' })),
     createdAt: FieldValue.serverTimestamp()
   });
@@ -4465,6 +4488,61 @@ function cancelarProgramadosTC(k){
   const batch = db.batch();
   items.forEach(g=>batch.delete(col('tarjeta_gastos').doc(g.id)));
   batch.commit();
+}
+
+// ================= ABONOS A LA TARJETA =================
+// Un abono es un pago parcial: se crea el gasto real de esa cuenta ya, y se descuenta de lo que debe.
+// Al cerrar el corte con "Debitar", solo se debita lo que falta.
+function abrirAbonoTC(){
+  document.getElementById('modalTitle').textContent = "💳 Abonar a la tarjeta";
+  document.getElementById('modalBody').innerHTML = `
+    <div class="field"><label>¿Quién abona?</label><select id="ab_cuenta" onchange="previewAbonoTC()">${cuentas.map(c=>`<option value="${c.id}" ${c.id===(ultimaCuenta()||'')?'selected':''}>${esc(c.nombre)}</option>`).join('')}</select></div>
+    <div class="field"><label>Monto del abono (Q)</label><input id="ab_monto" type="number" step="0.01" inputmode="decimal" placeholder="0.00" oninput="previewAbonoTC()"></div>
+    <div class="field"><label>Fecha</label><input id="ab_fecha" type="date" value="${hoyISO()}"></div>
+    <div id="ab_prev"></div>
+    ${ayuda('El abono sale de tu dinero hoy (se anota como gasto de pago de tarjeta) y se descuenta de lo que debes. Puedes abonar las veces que quieras. Cuando cierres el corte con "Debitar", solo se debita lo que falte. Si abonas más de lo que debes, queda a favor para el siguiente corte.', '¿Cómo funciona?')}
+    <button class="btn btn-primary" onclick="guardarAbonoTC()">Guardar abono</button>`;
+  previewAbonoTC();
+  document.getElementById('modalOverlay').classList.add('active');
+}
+function previewAbonoTC(){
+  const el = document.getElementById('ab_prev'); if(!el) return;
+  const id = document.getElementById('ab_cuenta').value;
+  const m = parseFloat(document.getElementById('ab_monto').value)||0;
+  const debe = calcularTarjetaPendienteSinPlan(id);
+  const queda = Math.round((debe-m)*100)/100;
+  el.innerHTML = `<div class="ocr-estado" style="margin:-6px 0 14px;">${esc(nombreCuenta(id))} debe de tarjeta <b>${q(debe)}</b>${m>0?` → después del abono: <b>${queda>=0?q(queda):q(0)+' (a favor '+q(-queda)+')'}</b>`:''}</div>`;
+}
+function guardarAbonoTC(){
+  const cuenta = document.getElementById('ab_cuenta').value;
+  const monto = Math.round((parseFloat(document.getElementById('ab_monto').value)||0)*100)/100;
+  const fecha = document.getElementById('ab_fecha').value;
+  if(monto<=0 || !fecha){ alert("Falta el monto o la fecha."); return; }
+  const gRef = col('gastos').doc(), aRef = col('tarjeta_abonos').doc(), batch = db.batch();
+  batch.set(gRef, { fecha, descripcion:'Abono a tarjeta de crédito', monto, quienPaga:cuenta, division:null, porcentajes:null,
+    categoria:'💳 Deudas / Cuotas', capa:'Pareja', origen:'tarjeta', abonoId:aRef.id, createdAt:FieldValue.serverTimestamp() });
+  batch.set(aRef, { fecha, cuenta, monto, gastoId:gRef.id, createdAt:FieldValue.serverTimestamp() });
+  batch.commit().catch(e=>alert("No se pudo guardar el abono: "+e.message));
+  recordarCuenta(cuenta);
+  closeModal();
+}
+function deshacerAbonoTC(abonoId){
+  const a = tarjetaAbonos.find(x=>x.id===abonoId); if(!a) return;
+  if(creditoAbonos(a.cuenta) < Number(a.monto)-0.004){ alert("Este abono ya se usó para cerrar un corte, así que no se puede deshacer."); return; }
+  if(!confirm(`¿Deshacer el abono de ${q(a.monto)} de ${nombreCuenta(a.cuenta)}? Se borra también su gasto.`)) return;
+  const batch = db.batch();
+  batch.delete(col('tarjeta_abonos').doc(abonoId));
+  if(a.gastoId) batch.delete(col('gastos').doc(a.gastoId));
+  batch.commit();
+}
+function abonosRecientesHTML(){
+  const vivos = tarjetaAbonos.filter(a=>creditoAbonos(a.cuenta)>0.004).slice(0,6);
+  if(!vivos.length) return '';
+  return `<details class="ayuda" style="margin:0 0 14px;"><summary>💳 Abonos de este corte (${vivos.length})</summary><div class="ayuda-txt">
+    ${vivos.map(a=>`<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:4px 0;">
+      <span>${fmtFecha(a.fecha)} · <span class="dot" style="background:${colorCuenta(a.cuenta)[0]}"></span> ${esc(nombreCuenta(a.cuenta))} · <b>${q(a.monto)}</b></span>
+      <button class="btn btn-ghost btn-small" onclick="deshacerAbonoTC('${a.id}')">↩️</button></div>`).join('')}
+  </div></details>`;
 }
 </script>
 </body>
