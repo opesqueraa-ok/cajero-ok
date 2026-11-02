@@ -4508,8 +4508,9 @@ function abrirAbonoTC(){
     <div class="field"><label>¿Quién abona?</label><select id="ab_cuenta" onchange="previewAbonoTC()">${cuentas.map(c=>`<option value="${c.id}" ${c.id===(ultimaCuenta()||'')?'selected':''}>${esc(c.nombre)}</option>`).join('')}</select></div>
     <div class="field"><label>Monto del abono (Q)</label><input id="ab_monto" type="number" step="0.01" inputmode="decimal" placeholder="0.00" oninput="previewAbonoTC()"></div>
     <div class="field"><label>Fecha</label><input id="ab_fecha" type="date" value="${hoyISO()}"></div>
+    <div class="field-check"><input type="checkbox" id="ab_banco" checked onchange="previewAbonoTC()"><label for="ab_banco">Sale de mi dinero (baja mi "Total que hay")</label></div>
     <div id="ab_prev"></div>
-    ${ayuda('El abono no es un gasto nuevo: el gasto fue la compra con tarjeta. Pero sí sale de tu banco, por eso baja tu "Total que hay" y se descuenta de lo que debes de tarjeta. No cuenta en el Top 10, los gráficos ni los sobres. Puedes abonar las veces que quieras. Cuando cierres el corte con "Debitar", solo se debita lo que falte. Si abonas más de lo que debes, queda a favor para el siguiente corte.', '¿Cómo funciona?')}
+    ${ayuda('El abono no es un gasto nuevo: el gasto fue la compra con tarjeta. Si lo pagas con tu dinero, deja marcada la casilla: baja tu "Total que hay" y lo que debes. Si el dinero no salió de tu cuenta (alguien más pagó directo a la tarjeta, o era dinero que no estaba en la app), desmárcala: solo baja lo que debes. Nunca cuenta en el Top 10, los gráficos ni los sobres. Puedes abonar las veces que quieras. Cuando cierres el corte con "Debitar", solo se debita lo que falte. Si abonas más de lo que debes, queda a favor para el siguiente corte.', '¿Cómo funciona?')}
     <button class="btn btn-primary" onclick="guardarAbonoTC()">Guardar abono</button>`;
   previewAbonoTC();
   document.getElementById('modalOverlay').classList.add('active');
@@ -4520,17 +4521,26 @@ function previewAbonoTC(){
   const m = parseFloat(document.getElementById('ab_monto').value)||0;
   const debe = calcularTarjetaPendienteSinPlan(id);
   const queda = Math.round((debe-m)*100)/100;
-  el.innerHTML = `<div class="ocr-estado" style="margin:-6px 0 14px;">${esc(nombreCuenta(id))} debe de tarjeta <b>${q(debe)}</b>${m>0?` → después del abono: <b>${queda>=0?q(queda):q(0)+' (a favor '+q(-queda)+')'}</b>`:''}</div>`;
+  const banco = document.getElementById('ab_banco').checked;
+  const total = calcularSaldo(id).total;
+  el.innerHTML = `<div class="ocr-estado" style="margin:-6px 0 14px;">${esc(nombreCuenta(id))} debe de tarjeta <b>${q(debe)}</b>${m>0?` → después del abono: <b>${queda>=0?q(queda):q(0)+' (a favor '+q(-queda)+')'}</b>`:''}<br>
+    ${banco ? `Total que hay: ${q(total)}${m>0?` → <b>${q(total-m)}</b>`:''}`
+            : `Total que hay no cambia (${q(total)}). Úsalo cuando el dinero no salió de tu cuenta: por ejemplo, alguien más pagó directo a la tarjeta.`}</div>`;
 }
 function guardarAbonoTC(){
   const cuenta = document.getElementById('ab_cuenta').value;
   const monto = Math.round((parseFloat(document.getElementById('ab_monto').value)||0)*100)/100;
   const fecha = document.getElementById('ab_fecha').value;
   if(monto<=0 || !fecha){ alert("Falta el monto o la fecha."); return; }
-  const gRef = col('gastos').doc(), aRef = col('tarjeta_abonos').doc(), batch = db.batch();
-  batch.set(gRef, { fecha, descripcion:'Abono a tarjeta de crédito', monto, quienPaga:cuenta, division:null, porcentajes:null,
-    categoria:'💳 Deudas / Cuotas', capa:'Pareja', origen:'tarjeta', abonoId:aRef.id, createdAt:FieldValue.serverTimestamp() });
-  batch.set(aRef, { fecha, cuenta, monto, gastoId:gRef.id, createdAt:FieldValue.serverTimestamp() });
+  const banco = document.getElementById('ab_banco').checked;
+  const aRef = col('tarjeta_abonos').doc(), batch = db.batch();
+  let gastoId = null;
+  if(banco){
+    const gRef = col('gastos').doc(); gastoId = gRef.id;
+    batch.set(gRef, { fecha, descripcion:'Abono a tarjeta de crédito', monto, quienPaga:cuenta, division:null, porcentajes:null,
+      categoria:'💳 Deudas / Cuotas', capa:'Pareja', origen:'tarjeta', abonoId:aRef.id, createdAt:FieldValue.serverTimestamp() });
+  }
+  batch.set(aRef, { fecha, cuenta, monto, gastoId, deBanco:banco, createdAt:FieldValue.serverTimestamp() });
   batch.commit().catch(e=>alert("No se pudo guardar el abono: "+e.message));
   recordarCuenta(cuenta);
   closeModal();
@@ -4538,7 +4548,7 @@ function guardarAbonoTC(){
 function deshacerAbonoTC(abonoId){
   const a = tarjetaAbonos.find(x=>x.id===abonoId); if(!a) return;
   if(creditoAbonos(a.cuenta) < Number(a.monto)-0.004){ alert("Este abono ya se usó para cerrar un corte, así que no se puede deshacer."); return; }
-  if(!confirm(`¿Deshacer el abono de ${q(a.monto)} de ${nombreCuenta(a.cuenta)}? Se borra también su gasto.`)) return;
+  if(!confirm(`¿Deshacer el abono de ${q(a.monto)} de ${nombreCuenta(a.cuenta)}?${a.gastoId?' Se borra también su salida del banco.':''}`)) return;
   const batch = db.batch();
   batch.delete(col('tarjeta_abonos').doc(abonoId));
   if(a.gastoId) batch.delete(col('gastos').doc(a.gastoId));
@@ -4549,7 +4559,7 @@ function abonosRecientesHTML(){
   if(!vivos.length) return '';
   return `<details class="ayuda" style="margin:0 0 14px;"><summary>💳 Abonos de este corte (${vivos.length})</summary><div class="ayuda-txt">
     ${vivos.map(a=>`<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:4px 0;">
-      <span>${fmtFecha(a.fecha)} · <span class="dot" style="background:${colorCuenta(a.cuenta)[0]}"></span> ${esc(nombreCuenta(a.cuenta))} · <b>${q(a.monto)}</b></span>
+      <span>${fmtFecha(a.fecha)} · <span class="dot" style="background:${colorCuenta(a.cuenta)[0]}"></span> ${esc(nombreCuenta(a.cuenta))} · <b>${q(a.monto)}</b>${a.deBanco===false?' · no salió del banco':''}</span>
       <button class="btn btn-ghost btn-small" onclick="deshacerAbonoTC('${a.id}')">↩️</button></div>`).join('')}
   </div></details>`;
 }
