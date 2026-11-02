@@ -1240,12 +1240,21 @@ function opcionesCategoria(lista, seleccionada){ return lista.map(c=>`<option ${
 // Las transferencias mueven dinero entre cuentas: cuentan para los saldos,
 // pero no como gasto/ingreso en los resúmenes de Visual.
 // Transferencias y ajustes de saldo cuentan para los saldos, pero no como gasto/ingreso en los resúmenes.
-function esTransfer(x){ return !!x && (x.categoria===CAT_TRANSFER || x.categoria===CAT_AJUSTE); }
+// Pagar la tarjeta (abonos y débito del corte) mueve dinero del banco a la tarjeta: no es un gasto nuevo.
+// El gasto real es la compra con tarjeta, que se cuenta en su fecha de compra.
+function esTransfer(x){ return !!x && (x.categoria===CAT_TRANSFER || x.categoria===CAT_AJUSTE || x.origen==='tarjeta'); }
+function gastosConCompras(){
+  const hoy = hoyISO();
+  const compras = tarjetaGastos.filter(t=>t.fecha && t.fecha<=hoy).map(t=>({
+    id:'tc_'+t.id, descripcion:t.descripcion, monto:t.monto, fecha:t.fecha, quienPaga:t.quien, division:t.division,
+    porcentajes:t.porcentajes, categoria:t.categoria, capa:'Pareja', createdAt:t.createdAt, esCompraTC:true }));
+  return gastos.filter(g=>!esTransfer(g)).concat(compras);
+}
 function gastosGenerales(){
-  return gastos.filter(g=>!esTransfer(g) && (ajustes.visualAlcance==='todo' || (g.capa||'Pareja')==='Pareja'));
+  return gastosConCompras().filter(g=>ajustes.visualAlcance==='todo' || (g.capa||'Pareja')==='Pareja');
 }
 function etiquetaGeneral(){ return ajustes.visualAlcance==='todo' ? '🌐 Todo' : '🤝 Compartido'; }
-function gastosParaVista(v){ return v==='Pareja' ? gastosGenerales() : gastos.filter(g=>!esTransfer(g)); }
+function gastosParaVista(v){ return v==='Pareja' ? gastosGenerales() : gastosConCompras(); }
 function gastoDeVista(g, v){ return v==='Pareja' ? Number(g.monto||0) : parteDe(g.quienPaga, g.division, g.monto, v, g.porcentajes); }
 
 function calcularAhorro(id){
@@ -1493,7 +1502,7 @@ function renderGastos(){
           ${(g.capa==='Personal')?'<span class="tag personal">🙋 Personal</span>':''}
           ${g.origen==='cuota'?'<span class="tag">📆 Cuota</span>':''}
           ${g.origen==='deuda'?'<span class="tag">🤝 Deuda</span>':''}
-          ${g.origen==='tarjeta'?'<span class="tag">💳 Tarjeta</span>':''}
+          ${g.origen==='tarjeta'?`<span class="tag">💳 ${g.abonoId?'Abono a':'Pago de'} tarjeta · no cuenta como gasto nuevo</span>`:''}
           ${g.origen==='reembolso'?'<span class="tag">↔️ Transferencia</span>':''}
           ${g.origen==='ajuste'?'<span class="tag">⚖️ Ajuste de saldo</span>':''}
           ${g.liquidacionId?'<span class="tag">🧮 En cuentas</span>':''}
@@ -2859,7 +2868,7 @@ function tarjetaSaldoMutuoHTML(){
 }
 function renderTop3Gastos(){
   const prefijo = prefijoMes(new Date());
-  const delMes = gastos.filter(g=>!esTransfer(g) && g.fecha && g.fecha.startsWith(prefijo));
+  const delMes = gastosConCompras().filter(g=>g.fecha && g.fecha.startsWith(prefijo));
   const top3 = [...delMes].sort((a,b)=>Number(b.monto||0)-Number(a.monto||0)).slice(0,10);
   const cont = document.getElementById('top3Gastos');
   if(top3.length===0){ cont.innerHTML = `<div class="empty-state"><span class="ic">🧾</span>Aún no hay gastos este mes.</div>`; return; }
@@ -2871,7 +2880,7 @@ function renderTop3Gastos(){
       <div class="receipt-row">
         <div>
           <div class="receipt-title">${medallas[i]||`<span style="display:inline-block; min-width:22px; color:var(--text-soft);">${i+1}.</span>`} ${esc(g.descripcion)||'(sin descripción)'}</div>
-          <div class="receipt-sub">${fmtFecha(g.fecha)} · ${esc(etiquetaQuien(g.quienPaga, g.division, g.porcentajes))} ${g.categoria?('· '+esc(g.categoria)):''}</div>
+          <div class="receipt-sub">${fmtFecha(g.fecha)} · ${esc(etiquetaQuien(g.quienPaga, g.division, g.porcentajes))} ${g.categoria?('· '+esc(g.categoria)):''}${g.esCompraTC?' · 💳':''}</div>
         </div>
         <div class="receipt-amount num">${q(g.monto)}</div>
       </div>
@@ -2897,7 +2906,7 @@ function renderFunFacts(){
     <div class="fact-card"><span class="ic">🐷</span><div class="val">${pctAho}%</div><div class="lbl">De lo que entró se ha ahorrado</div></div>
     <div class="fact-card"><span class="ic">🔁</span><div class="val num">${q(compromisoMes)}</div><div class="lbl">Fijo al mes en suscripciones</div></div>`;
   if(cuentas.length>1){
-    const gTodos = gastos.filter(g=>!esTransfer(g) && g.fecha && g.fecha.startsWith(prefijo));
+    const gTodos = gastosConCompras().filter(g=>g.fecha && g.fecha.startsWith(prefijo));
     html += cuentas.map(c=>{
       const t = gTodos.reduce((s,g)=>s+parteDe(g.quienPaga, g.division, g.monto, c.id, g.porcentajes),0);
       return `<div class="fact-card"><span class="ic"><span class="dot-lg" style="background:${colorCuenta(c.id)[0]}"></span></span>
@@ -4500,7 +4509,7 @@ function abrirAbonoTC(){
     <div class="field"><label>Monto del abono (Q)</label><input id="ab_monto" type="number" step="0.01" inputmode="decimal" placeholder="0.00" oninput="previewAbonoTC()"></div>
     <div class="field"><label>Fecha</label><input id="ab_fecha" type="date" value="${hoyISO()}"></div>
     <div id="ab_prev"></div>
-    ${ayuda('El abono sale de tu dinero hoy (se anota como gasto de pago de tarjeta) y se descuenta de lo que debes. Puedes abonar las veces que quieras. Cuando cierres el corte con "Debitar", solo se debita lo que falte. Si abonas más de lo que debes, queda a favor para el siguiente corte.', '¿Cómo funciona?')}
+    ${ayuda('El abono no es un gasto nuevo: el gasto fue la compra con tarjeta. Pero sí sale de tu banco, por eso baja tu "Total que hay" y se descuenta de lo que debes de tarjeta. No cuenta en el Top 10, los gráficos ni los sobres. Puedes abonar las veces que quieras. Cuando cierres el corte con "Debitar", solo se debita lo que falte. Si abonas más de lo que debes, queda a favor para el siguiente corte.', '¿Cómo funciona?')}
     <button class="btn btn-primary" onclick="guardarAbonoTC()">Guardar abono</button>`;
   previewAbonoTC();
   document.getElementById('modalOverlay').classList.add('active');
