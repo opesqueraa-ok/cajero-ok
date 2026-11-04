@@ -8,8 +8,9 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="CaparaDos">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   /* ===== Tokens: el tema (JS) pone --brand y los acentos; el modo (claro/oscuro) pone las superficies ===== */
   :root{
@@ -21,10 +22,13 @@
     --tag-pl-bg:#F3E9EC; --tag-ej-bg:#D7F0EA; --tag-ej-fg:#3581B8;
     --danger:#9B4351; --ok:#3E8E7E; --ok-bg:#DDF0EA; --warn-bg:#F6E9D9; --warn-fg:#8A6A3A;
     --radius:20px;
+    --font:'Quicksand',sans-serif;
     --shadow-sm: 0 1px 2px rgba(var(--brand-rgb),.06), 0 2px 8px rgba(var(--brand-rgb),.06);
     --shadow-md: 0 2px 6px rgba(var(--brand-rgb),.07), 0 8px 24px rgba(var(--brand-rgb),.09);
     font-size:16px;
   }
+  html[data-letra="jakarta"]{ --font:'Plus Jakarta Sans',sans-serif; }
+  html[data-letra="jakarta"] .num, html[data-letra="jakarta"] .hero-big, html[data-letra="jakarta"] .hero-tile-num{ letter-spacing:-0.03em; }
   html[data-modo="oscuro"]{
     color-scheme: dark;
     --bg:#141316; --card:#1F1D22; --text:#EEEAF0; --text-soft:#A9A2AD; --line:#34313A;
@@ -36,10 +40,10 @@
   *{box-sizing:border-box;}
   body{
     margin:0; background:var(--bg); color:var(--text);
-    font-family:'Quicksand',sans-serif; -webkit-font-smoothing:antialiased;
+    font-family:var(--font); -webkit-font-smoothing:antialiased;
     padding-bottom:120px;
   }
-  h1,h2,h3{ font-family:'Quicksand',sans-serif; font-weight:700; margin:0; letter-spacing:-0.01em; }
+  h1,h2,h3{ font-family:var(--font); font-weight:700; margin:0; letter-spacing:-0.01em; }
   .num{ font-variant-numeric:tabular-nums; font-weight:600; }
 
   /* ---------- Login ---------- */
@@ -60,7 +64,7 @@
   .field > label{ display:block; font-size:12.5px; color:var(--text-soft); margin-bottom:6px; font-weight:700; }
   .field input, .field select, .field textarea, .aj-input{
     width:100%; max-width:100%; min-width:0; padding:12px 14px; border:1.5px solid var(--line); border-radius:12px;
-    font-family:'Quicksand',sans-serif; font-size:16px; font-weight:500; background:var(--input-bg); color:var(--text);
+    font-family:var(--font); font-size:16px; font-weight:500; background:var(--input-bg); color:var(--text);
     box-sizing:border-box; -webkit-appearance:none; appearance:none;
   }
   .field select{
@@ -105,10 +109,10 @@
   .cq-item label{ display:flex; flex-direction:column; gap:4px; font-size:11.5px; font-weight:700; color:var(--text-soft); min-width:0; }
   .cq-full{ margin-bottom:8px; }
   .cq-item input, .cq-item select{ width:100%; min-width:0; padding:9px 10px; border:1.5px solid var(--line); border-radius:10px; background:var(--input-bg); color:var(--text);
-    font-family:'Quicksand',sans-serif; font-size:16px; font-weight:500; box-sizing:border-box; -webkit-appearance:none; appearance:none; }
+    font-family:var(--font); font-size:16px; font-weight:500; box-sizing:border-box; -webkit-appearance:none; appearance:none; }
   .cq-nota{ display:block; margin-top:8px; font-size:11.5px; font-weight:600; color:var(--text-soft); line-height:1.4; }
   .cq-subs{ background:var(--card); border-radius:14px; padding:10px 12px; box-shadow:var(--shadow-sm); display:flex; flex-wrap:wrap; gap:6px; }
-  .cq-subs .chip{ border:none; font-family:'Quicksand',sans-serif; }
+  .cq-subs .chip{ border:none; font-family:var(--font); }
   .btn:disabled{ opacity:.45; cursor:default; }
   /* Hoy puedes gastar */
   .hoy-frase{ font-size:14px; font-weight:700; margin:0 0 12px; line-height:1.4; }
@@ -122,7 +126,7 @@
   .hoy-sub{ font-size:11.5px; font-weight:600; color:var(--text-soft); line-height:1.4; }
   .hoy-sub b, .sobre-pie b, .sobre-hint b{ white-space:nowrap; }
   /* Sobres */
-  .sobre{ display:block; width:100%; text-align:left; border:none; cursor:pointer; font-family:'Quicksand',sans-serif; color:var(--text);
+  .sobre{ display:block; width:100%; text-align:left; border:none; cursor:pointer; font-family:var(--font); color:var(--text);
     background:var(--card); border-radius:16px; padding:12px 14px; margin-bottom:10px; box-shadow:var(--shadow-sm); }
   .sobre:active{ transform:scale(.99); }
   .sobre-top{ display:flex; justify-content:space-between; align-items:center; gap:8px; }
@@ -175,7 +179,7 @@
   /* ---------- Botones ---------- */
   .btn{
     display:inline-flex; align-items:center; justify-content:center; gap:6px;
-    border:none; border-radius:12px; padding:12px 18px; font-family:'Quicksand',sans-serif;
+    border:none; border-radius:12px; padding:12px 18px; font-family:var(--font);
     font-weight:700; font-size:14px; cursor:pointer; transition:transform .1s ease, opacity .15s ease;
   }
   .btn:active{ transform:scale(.96); transition:transform 100ms ease-out; }
@@ -193,7 +197,7 @@
   #appShell{ display:none; }
   header.topbar{
     max-width:680px; margin:0 auto; color:var(--text);
-    padding:16px 16px 0; padding-top:calc(16px + env(safe-area-inset-top)); display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:16px 16px 0; padding-top:calc(30px + env(safe-area-inset-top)); display:flex; align-items:center; justify-content:space-between; gap:10px;
   }
   header.topbar .brand{ display:flex; align-items:center; gap:12px; min-width:0; }
   header.topbar .brand-mark{
@@ -225,7 +229,7 @@
     display:flex; align-items:center; justify-content:space-around;
   }
   nav.bottomnav button{
-    flex:0 0 auto; height:48px; min-width:48px; background:none; border:none; color:rgba(255,255,255,.72); font-family:'Quicksand',sans-serif;
+    flex:0 0 auto; height:48px; min-width:48px; background:none; border:none; color:rgba(255,255,255,.72); font-family:var(--font);
     font-size:14px; font-weight:700; padding:0 12px; border-radius:999px; cursor:pointer;
     display:flex; align-items:center; justify-content:center;
     transition: background-color 250ms ease-out, color 250ms ease-out, padding 250ms ease-out;
@@ -244,7 +248,7 @@
   .segmented::-webkit-scrollbar{ display:none; }
   .segmented button{
     flex:1; border:none; background:transparent; padding:9px 10px; border-radius:9px;
-    font-family:'Quicksand',sans-serif; font-weight:700; font-size:12px; color:var(--text-soft); cursor:pointer; white-space:nowrap;
+    font-family:var(--font); font-weight:700; font-size:12px; color:var(--text-soft); cursor:pointer; white-space:nowrap;
     transition: background-color 180ms ease-out, color 180ms ease-out, box-shadow 180ms ease-out;
   }
   .segmented button.active{ background:var(--seg-on); color:var(--text); box-shadow:0 2px 6px rgba(0,0,0,.12); }
@@ -367,30 +371,32 @@
   }
 
   /* ---------- Visual ---------- */
-  .hero{ background:var(--brand); color:#fff; border-radius:28px; padding:18px 16px 16px; margin-bottom:18px;
+  .hero{ background:var(--brand); color:#fff; border-radius:30px; padding:26px 16px 16px; margin-bottom:20px;
     box-shadow:0 10px 30px rgba(var(--brand-rgb),.28); }
   .hero.entra{ animation:heroIn 450ms cubic-bezier(.2,.8,.2,1); }
   html[data-modo="oscuro"] .hero{ box-shadow:0 10px 30px rgba(0,0,0,.35); }
   @keyframes heroIn{ from{ opacity:0; transform:translateY(10px) scale(.985); } to{ opacity:1; transform:none; } }
-  .hero button{ font-family:'Quicksand',sans-serif; color:inherit; }
-  .hero-total{ display:flex; flex-direction:column; align-items:center; width:100%; background:none; border:none; padding:4px 0 14px; cursor:pointer; }
+  .hero button{ font-family:var(--font); color:inherit; }
+  .hero-total{ display:flex; flex-direction:column; align-items:center; width:100%; background:none; border:none; padding:4px 0 22px; cursor:pointer; }
+  .hero-sub{ font-size:13px; font-weight:600; color:rgba(255,255,255,.7); margin-top:4px; }
   .hero-lbl{ display:inline-flex; align-items:center; gap:4px; font-size:13.5px; font-weight:700; color:rgba(255,255,255,.75); }
   .hero-chev{ transition:transform 300ms ease; }
   .hero-total.open .hero-chev{ transform:rotate(180deg); }
-  .hero-big{ font-size:38px; font-weight:700; letter-spacing:-0.025em; line-height:1.15; margin-top:2px; white-space:nowrap; }
+  .hero-big{ font-size:44px; font-weight:700; letter-spacing:-0.025em; line-height:1.15; margin-top:2px; white-space:nowrap; }
   .hero-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
   .hero-grid > :last-child:nth-child(odd){ grid-column:1 / -1; }
-  .hero-tile{ text-align:left; background:rgba(255,255,255,.09); border:1.5px solid transparent; border-radius:18px; padding:11px 12px; cursor:pointer; min-width:0;
+  .hero-tile{ text-align:left; background:rgba(255,255,255,.09); border:1.5px solid transparent; border-radius:20px; padding:16px 14px 14px; cursor:pointer; min-width:0;
     transition:background-color 200ms ease, border-color 200ms ease, transform 100ms ease-out; }
   .hero.entra .hero-tile{ animation:tileIn 500ms cubic-bezier(.2,.8,.2,1) backwards; }
   .hero.entra .hero-tile:nth-child(2){ animation-delay:60ms; } .hero.entra .hero-tile:nth-child(3){ animation-delay:120ms; } .hero.entra .hero-tile:nth-child(4){ animation-delay:180ms; }
   @keyframes tileIn{ from{ opacity:0; transform:translateY(8px); } to{ opacity:1; transform:none; } }
   .hero-tile:active{ transform:scale(.97); }
   .hero-tile.on{ background:rgba(255,255,255,.16); border-color:rgba(255,255,255,.35); }
-  .hero-tile-top{ display:flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color:rgba(255,255,255,.78); min-width:0; }
+  .hero-tile-top{ display:flex; align-items:center; gap:7px; font-size:14px; font-weight:700; color:rgba(255,255,255,.78); min-width:0; }
   .hero-tile-top .nm{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .hero-tile-top .dot{ width:9px; height:9px; flex-shrink:0; box-shadow:0 0 0 2px rgba(255,255,255,.25); }
-  .hero-tile-num{ display:block; font-size:21px; font-weight:700; letter-spacing:-0.02em; margin-top:3px; white-space:nowrap; }
+  .hero-tile-num{ display:block; font-size:24px; font-weight:700; letter-spacing:-0.02em; margin-top:8px; white-space:nowrap; }
+  .hero-tile-lbl{ display:block; font-size:12px; font-weight:600; color:rgba(255,255,255,.65); margin-top:4px; }
   .hero-neg{ color:#FFC2CB; }
   .hero-panel{ display:grid; grid-template-rows:0fr; opacity:0; transition:grid-template-rows 380ms cubic-bezier(.2,.8,.2,1), opacity 260ms ease; }
   .hero-panel.open{ grid-template-rows:1fr; opacity:1; }
@@ -416,7 +422,7 @@
   .hero .ayuda-txt{ background:rgba(0,0,0,.15); box-shadow:none; color:rgba(255,255,255,.85); }
   .atajos{ display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:8px; margin:0 0 6px; }
   .atajo{ display:flex; flex-direction:column; align-items:center; gap:6px; background:none; border:none; padding:0; cursor:pointer;
-    font-family:'Quicksand',sans-serif; font-size:12.5px; font-weight:700; color:var(--text); }
+    font-family:var(--font); font-size:12.5px; font-weight:700; color:var(--text); }
   .atajo-ic{ width:54px; height:54px; border-radius:50%; background:var(--card); box-shadow:var(--shadow-sm); color:var(--brand);
     display:flex; align-items:center; justify-content:center; transition:transform 100ms ease-out; }
   html[data-modo="oscuro"] .atajo-ic{ color:var(--text); }
@@ -429,7 +435,7 @@
   .sobre-queda{ font-size:15px; font-weight:700; margin-bottom:2px; white-space:nowrap; }
   .sobre-pasado .sobre-queda{ color:var(--danger); }
   .sobre-crear{ display:flex; align-items:center; gap:10px; width:100%; background:var(--card); border:none; border-radius:16px; padding:12px 14px; box-shadow:var(--shadow-sm);
-    font-family:'Quicksand',sans-serif; font-size:14px; font-weight:700; color:var(--text); cursor:pointer; text-align:left; margin-bottom:8px; }
+    font-family:var(--font); font-size:14px; font-weight:700; color:var(--text); cursor:pointer; text-align:left; margin-bottom:8px; }
   @keyframes barIn{ from{ transform:scaleX(0); } to{ transform:scaleX(1); } }
   .sobres-grid.entra .sobre-barra span{ transform-origin:left; animation:barIn 700ms cubic-bezier(.2,.8,.2,1); }
   @media (prefers-reduced-motion: reduce){
@@ -453,7 +459,7 @@
   .pago-left{ display:flex; align-items:center; gap:8px; }
   .pago-monto-input{
     width:92px; padding:6px 8px; border:1.5px solid var(--line); border-radius:8px; background:var(--input-bg); color:var(--text);
-    font-family:'Quicksand',sans-serif; font-weight:600; font-size:16px; text-align:right;
+    font-family:var(--font); font-weight:600; font-size:16px; text-align:right;
     box-sizing:border-box; -webkit-appearance:none; appearance:none;
   }
 
@@ -468,7 +474,7 @@
   .tema-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px; }
   .tema-btn{
     display:flex; flex-direction:column; align-items:flex-start; gap:8px; padding:12px; border-radius:14px;
-    border:2px solid var(--line); background:var(--card); color:var(--text); font-family:'Quicksand',sans-serif; font-weight:700; font-size:13.5px; cursor:pointer;
+    border:2px solid var(--line); background:var(--card); color:var(--text); font-family:var(--font); font-weight:700; font-size:13.5px; cursor:pointer;
   }
   .tema-btn.on{ border-color:var(--brand); }
   .tema-sw{ display:flex; gap:4px; }
@@ -481,7 +487,7 @@
   .ocr-mov{
     display:flex; width:100%; align-items:center; justify-content:space-between; gap:10px; text-align:left;
     padding:10px 12px; margin-bottom:8px; border-radius:12px; border:1.5px solid var(--line); background:var(--card); color:var(--text);
-    font-family:'Quicksand',sans-serif; font-size:14px; cursor:pointer;
+    font-family:var(--font); font-size:14px; cursor:pointer;
   }
   .ocr-mov:active{ transform:scale(.98); }
   .ocr-mov.off{ opacity:.45; cursor:default; }
@@ -825,6 +831,14 @@ function cargarAjustes(d){
 function diaCorte(){ return Math.min(28, Math.max(1, Number(ajustes.diaCorte)||11)); }
 function diaPago(){ return Math.min(28, Math.max(1, Number(ajustes.diaPago)||5)); }
 
+// Tipo de letra: se elige en cada dispositivo.
+function letraActual(){ try{ return localStorage.getItem('caparados_letra')==='jakarta' ? 'jakarta' : 'quicksand'; }catch(e){ return 'quicksand'; } }
+function setLetra(l){
+  try{ localStorage.setItem('caparados_letra', l==='jakarta'?'jakarta':'quicksand'); }catch(e){}
+  aplicarTema(ajustesBorrador ? ajustesBorrador.temaDisp : undefined);
+  if(ajustesAbierto) renderAjustesForm();
+  renderAll();
+}
 function aplicarTema(temaId){
   temaVisible = (temaId && TEMAS[temaId]) ? temaId : temaPreferido();
   const t = TEMAS[temaVisible];
@@ -832,6 +846,7 @@ function aplicarTema(temaId){
   const oscuro = modo==='oscuro' || (modo==='auto' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
   const r = document.documentElement;
   r.dataset.modo = oscuro ? 'oscuro' : 'claro';
+  r.dataset.letra = letraActual();
   const base = oscuro ? CARD_BASE_OSCURO : CARD_BASE_CLARO;
   r.style.setProperty('--brand', t.brand);
   r.style.setProperty('--brand-rgb', hexRgb(t.brand).join(','));
@@ -849,7 +864,7 @@ function aplicarTema(temaId){
     const cs = getComputedStyle(r);
     Chart.defaults.color = cs.getPropertyValue('--text-soft').trim() || '#7B6C7B';
     Chart.defaults.borderColor = cs.getPropertyValue('--line').trim() || '#DADADA';
-    Chart.defaults.font.family = 'Quicksand';
+    Chart.defaults.font.family = letraActual()==='jakarta' ? 'Plus Jakarta Sans' : 'Quicksand';
   }
 }
 aplicarTema(temaVisible);
@@ -3125,7 +3140,13 @@ function renderAjustesForm(){
         ${[['claro','☀️ Claro'],['oscuro','🌙 Oscuro'],['auto','⚙️ Automático']].map(([k,t])=>`<button class="${k===modo?'active':''}" onclick="setModo('${k}')">${t}</button>`).join('')}
       </div></div>
 
-    <div class="field"><label>En la tarjeta de Visual, debajo del total, ver</label>
+    <div class="field"><label>Tipo de letra</label>
+      <div class="segmented" style="margin:0;">
+        <button class="${letraActual()==='quicksand'?'active':''}" style="font-family:'Quicksand',sans-serif; font-size:13px;" onclick="setLetra('quicksand')">Redondeada</button>
+        <button class="${letraActual()==='jakarta'?'active':''}" style="font-family:'Plus Jakarta Sans',sans-serif; font-size:13px;" onclick="setLetra('jakarta')">Profesional</button>
+      </div></div>
+
+    <div class="field"><label>En la tarjeta de Visual ver</label>
       <div class="segmented" style="margin:0;">
         ${[['libre','Lo libre'],['hoy','Lo de hoy']].map(([k,t])=>`<button class="${k===heroMetrica()?'active':''}" onclick="setHeroMetrica('${k}')">${t}</button>`).join('')}
       </div></div>
@@ -4366,16 +4387,21 @@ function renderHoy(){
     else { const h = hoyCuenta(c.id); lbl = h.libreReal<=0 ? 'Hoy, mejor no' : 'Hoy'; val = h.libreReal<=0 ? 0 : Math.max(0,h.quedaHoy); neg = h.libreReal<=0 || h.quedaHoy<0; }
     const on = heroAbierto===c.id;
     return `<button class="hero-tile ${on?'on':''}" data-hero="${c.id}" aria-expanded="${on}" onclick="toggleHero('${c.id}')">
-      <span class="hero-tile-top"><span class="dot" style="background:${colorCuenta(c.id)[0]}"></span><span class="nm">${esc(c.nombre)}</span><span style="opacity:.75;">· ${lbl}</span></span>
+      <span class="hero-tile-top"><span class="dot" style="background:${colorCuenta(c.id)[0]}"></span><span class="nm">${esc(c.nombre)}</span></span>
       ${heroNum('c_'+met+'_'+c.id, val, 'hero-tile-num'+(neg?' hero-neg':''))}
+      <span class="hero-tile-lbl">${lbl==='Hoy'?'Para hoy':lbl==='Hoy, mejor no'?'Hoy, mejor no gastar':'Libre'}</span>
     </button>`;
   }).join('');
   const abiertoTodos = heroAbierto==='todos';
+  const sumaMet = met==='libre'
+    ? cuentas.reduce((t,c)=>t+calcularSaldo(c.id).disponible,0)
+    : cuentas.reduce((t,c)=>{ const h=hoyCuenta(c.id); return t + (h.libreReal<=0?0:Math.max(0,h.quedaHoy)); },0);
   const entra = heroEntrada; heroEntrada = false;
   cont.innerHTML = `<div class="hero ${entra?'entra':''}">
     <button class="hero-total ${abiertoTodos?'open':''}" data-hero="todos" aria-expanded="${abiertoTodos}" onclick="toggleHero('todos')">
       <span class="hero-lbl">Total ${ic('chev',16).replace('class="ico"','class="ico hero-chev"')}</span>
       ${heroNum('total', total, 'hero-big'+(total<0?' hero-neg':''))}
+      <span class="hero-sub">${met==='libre'?'Libre':'Para hoy'} ${qh(sumaMet)}</span>
     </button>
     <div class="hero-panel ${abiertoTodos?'open':''}" data-panel="todos"><div class="hero-panel-in">${heroDetalleTodos()}</div></div>
     <div class="hero-grid">${tiles}</div>
