@@ -3166,7 +3166,8 @@ function renderAjustesForm(){
         <input type="number" min="1" max="28" value="${b.diaPago||5}" oninput="ajustesBorrador.diaPago=parseInt(this.value)||5"></div>
     </div>
 
-    <button class="btn btn-primary" onclick="guardarAjustes()">Guardar ajustes</button>`;
+    <button class="btn btn-primary" onclick="guardarAjustes()">Guardar ajustes</button>
+    <div class="hint" style="text-align:center; margin:14px 0 0;">Versión 4 nov 2026 · diseño nuevo v2</div>`;
 }
 function agregarCuentaBorrador(){
   const b = ajustesBorrador; if(b.cuentas.length>=MAX_CUENTAS) return;
