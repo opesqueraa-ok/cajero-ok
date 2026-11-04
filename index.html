@@ -404,7 +404,14 @@
   .hero-detalle{ background:rgba(255,255,255,.08); border-radius:18px; padding:4px 14px; margin:2px 0 12px; }
   .hero-grid + .hero-panel .hero-detalle{ margin:12px 0 0; }
   .hero-fila{ display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 0; font-size:13.5px; font-weight:600; color:rgba(255,255,255,.8); }
-  .hero-fila + .hero-fila{ border-top:1px solid rgba(255,255,255,.12); }
+  .hero-item + .hero-item{ border-top:1px solid rgba(255,255,255,.12); }
+  button.hero-fila{ width:100%; background:none; border:none; text-align:left; cursor:pointer; font-family:var(--font); }
+  .hero-fila .hero-info{ display:inline-block; width:6px; height:6px; border-radius:50%; background:rgba(255,255,255,.45); margin-left:7px; flex-shrink:0; transition:opacity 200ms; }
+  .hero-item.ver .hero-info{ opacity:0; }
+  .hero-nota{ display:grid; grid-template-rows:0fr; opacity:0; transition:grid-template-rows 300ms cubic-bezier(.2,.8,.2,1), opacity 220ms ease; }
+  .hero-item.ver .hero-nota{ grid-template-rows:1fr; opacity:1; }
+  .hero-nota > div{ overflow:hidden; min-height:0; font-size:12px; font-weight:600; color:rgba(255,255,255,.68); line-height:1.4; }
+  .hero-nota > div > div{ padding:0 0 10px 22px; }
   .hero-fila b{ color:#fff; font-size:15px; font-weight:700; white-space:nowrap; }
   .hero-fila small{ display:block; font-size:11.5px; color:rgba(255,255,255,.62); font-weight:600; margin-top:1px; }
   .hero-fila .ico{ opacity:.8; margin-right:6px; }
@@ -3167,7 +3174,7 @@ function renderAjustesForm(){
     </div>
 
     <button class="btn btn-primary" onclick="guardarAjustes()">Guardar ajustes</button>
-    <div class="hint" style="text-align:center; margin:14px 0 0;">Versión 4 nov 2026 · diseño nuevo v2</div>`;
+    <div class="hint" style="text-align:center; margin:14px 0 0;">Versión 4 nov 2026 · diseño nuevo v3</div>`;
 }
 function agregarCuentaBorrador(){
   const b = ajustesBorrador; if(b.cuentas.length>=MAX_CUENTAS) return;
@@ -4301,7 +4308,16 @@ function setHeroMetrica(m){
 function toggleHero(k){
   heroAbierto = heroAbierto===k ? null : k;
   const cont = document.getElementById('hoyHero'); if(!cont) return;
-  cont.querySelectorAll('.hero-panel').forEach(pn=>pn.classList.toggle('open', pn.dataset.panel===heroAbierto));
+  cont.querySelectorAll('.hero-panel').forEach(pn=>{
+    const abrir = pn.dataset.panel===heroAbierto;
+    if(abrir && !pn.classList.contains('open')){
+      // Al desplegar, los números del detalle cuentan desde 0.
+      pn.querySelectorAll('[data-anim]').forEach(el=>{ heroUltimos[el.dataset.anim] = 0; });
+      animarNumerosHero(pn);
+    }
+    if(!abrir) pn.querySelectorAll('.hero-item.ver').forEach(x=>x.classList.remove('ver'));
+    pn.classList.toggle('open', abrir);
+  });
   cont.querySelectorAll('[data-hero]').forEach(b=>{
     const on = b.dataset.hero===heroAbierto;
     b.classList.toggle(b.classList.contains('hero-total')?'open':'on', on);
@@ -4329,38 +4345,39 @@ function animarNumerosHero(cont){
     heroAnim[k] = requestAnimationFrame(paso);
   });
 }
-function heroFila(icono, etiqueta, valorHTML, sub){
-  return `<div class="hero-fila"><span class="hero-fila-lbl">${icono?ic(icono,16):''}<span>${etiqueta}${sub?`<small>${sub}</small>`:''}</span></span>${valorHTML}</div>`;
+// Una fila del detalle. Si tiene nota, la fila se puede tocar para mostrarla (un puntito avisa que hay algo más).
+function heroFila(icono, etiqueta, valorHTML, nota, extra){
+  const cab = `<span class="hero-fila-lbl">${icono?ic(icono,16):''}<span>${etiqueta}</span>${nota?'<span class="hero-info"></span>':''}</span>${valorHTML}`;
+  if(!nota) return `<div class="hero-item"><div class="hero-fila">${cab}</div>${extra||''}</div>`;
+  return `<div class="hero-item"><button class="hero-fila" onclick="this.parentNode.classList.toggle('ver')">${cab}</button>${extra||''}
+    <div class="hero-nota"><div><div>${nota}</div></div></div></div>`;
 }
-function heroB(v){ return `<b class="num ${v<0?'hero-neg':''}">${qh(v)}</b>`; }
+function heroB(v, clave){ return `<b class="num ${v<0?'hero-neg':''}" ${clave?`data-anim="${clave}" data-valor="${Math.round(v*100)/100}"`:''}>${qh(v)}</b>`; }
 function heroDetalleCuenta(id){
   const s = calcularSaldo(id), h = hoyCuenta(id), tc = calcularTarjetaPendienteSinPlan(id);
   const usado = h.presupuesto>0 ? Math.min(100, h.gastadoHoy/h.presupuesto*100) : 0;
   const hoyTxt = h.libreReal<=0
-    ? `Hoy, mejor no gastar · faltan ${q(-h.libreReal)} para cubrir tarjeta, planes y subs`
+    ? `Hoy, mejor no gastar: faltan ${q(-h.libreReal)} para cubrir tarjeta, planes y suscripciones.`
     : h.gastadoHoy>0
-      ? (h.quedaHoy<0 ? `Hoy te pasaste por ${q(-h.quedaHoy)}` : `Ya gastaste ${q(h.gastadoHoy)} de ${q(h.presupuesto)}`)
-      : `${q(h.libreReal)} libres para ${h.dias} día${h.dias===1?'':'s'}`;
+      ? (h.quedaHoy<0 ? `Hoy te pasaste por ${q(-h.quedaHoy)}.` : `Ya gastaste ${q(h.gastadoHoy)} de ${q(h.presupuesto)}.`)
+      : `${q(h.libreReal)} libres para ${h.dias} día${h.dias===1?'':'s'}.`;
+  const k = n => 'p_'+id+'_'+n;
   const met = heroMetrica();
+  const hoyVal = h.libreReal<=0 ? 0 : Math.max(0,h.quedaHoy);
   return `<div class="hero-detalle">
-    <div class="hero-fila"><span class="hero-fila-lbl">${ic('balanza',16)}<span>Total que hay</span></span>
-      <span style="display:flex; align-items:center;">${heroB(s.total)}<button class="hero-mini-btn" onclick="abrirCuadre()">Cuadrar</button></span></div>
-    ${heroFila('sobre','Libre', heroB(s.disponible), 'Lo que queda sin planes ni suscripciones pendientes')}
-    <div class="hero-fila" style="flex-direction:column; align-items:stretch; gap:0;">
-      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
-        <span class="hero-fila-lbl">${ic('visual',16)}<span>Hoy puedes gastar</span></span>
-        <b class="num ${h.quedaHoy<0||h.libreReal<=0?'hero-neg':''}">${qh(h.libreReal<=0?0:Math.max(0,h.quedaHoy))}</b></div>
-      ${h.libreReal>0?`<div class="hero-barra"><span style="width:${usado}%; ${h.quedaHoy<0?'background:#FFC2CB':''}"></span></div>`:''}
-      <small style="font-size:11.5px; color:rgba(255,255,255,.62); font-weight:600; margin-top:6px;">${hoyTxt}</small>
-    </div>
-    ${heroFila('movs','Planificado', heroB(s.porPagar), s.porPagarSubs>0.004?`incluye ${q(s.porPagarSubs)} de suscripciones`:'')}
-    ${tc>0.004?heroFila('tarjeta','Por pagar de tarjeta', heroB(tc)):''}
-    ${heroFila('ahorro','Ahorrado', heroB(s.saldoAhorro))}
-    ${s.debePareja>0.004?heroFila('balanza','Le debes de cuentas', heroB(s.debePareja)):''}
-    ${s.cobraPareja>0.004?heroFila('balanza','Te deben de cuentas', heroB(s.cobraPareja)):''}
+    ${heroFila('balanza','Total', heroB(s.total, k('total')),
+      `Lo que hay de verdad en tu cuenta, sin lo ahorrado. <button class="hero-mini-btn" style="margin:4px 0 0;" onclick="abrirCuadre()">Cuadrar con el banco</button>`)}
+    ${heroFila('sobre','Libre', heroB(s.disponible, k('libre')), 'El total menos lo planificado y las suscripciones que faltan este mes.')}
+    ${heroFila('visual','Hoy', `<b class="num ${h.quedaHoy<0||h.libreReal<=0?'hero-neg':''}" data-anim="${k('hoy')}" data-valor="${Math.round(hoyVal*100)/100}">${qh(hoyVal)}</b>`,
+      `${hoyTxt} Se toma lo libre, se le resta lo que falta pagar de la tarjeta y se divide entre los días que quedan del mes.`,
+      h.libreReal>0?`<div class="hero-barra" style="margin:-4px 0 10px;"><span style="width:${usado}%; ${h.quedaHoy<0?'background:#FFC2CB':''}"></span></div>`:'')}
+    ${heroFila('movs','Planificado', heroB(s.porPagar, k('plan')), s.porPagarSubs>0.004?`Incluye ${q(s.porPagarSubs)} de suscripciones que faltan este mes.`:'')}
+    ${heroFila('tarjeta','Por pagar de tarjeta', heroB(tc, k('tc')))}
+    ${heroFila('ahorro','Ahorrado', heroB(s.saldoAhorro, k('aho')))}
+    ${s.debePareja>0.004?heroFila('balanza','Le debes de cuentas', heroB(s.debePareja, k('debe'))):''}
+    ${s.cobraPareja>0.004?heroFila('balanza','Te deben de cuentas', heroB(s.cobraPareja, k('cobra'))):''}
     <div class="hero-ver"><span>En este celular ver:</span>
       <span class="hero-seg"><button class="${met==='libre'?'active':''}" onclick="setHeroMetrica('libre')">Libre</button><button class="${met==='hoy'?'active':''}" onclick="setHeroMetrica('hoy')">Hoy</button></span></div>
-    ${ayuda('<b>Libre</b> es el total menos lo planificado y las suscripciones que faltan este mes. <b>Hoy puedes gastar</b> toma lo libre, le resta lo que falta pagar de la tarjeta y lo divide entre los días que quedan del mes. Si hoy gastas menos, mañana el número sube; si gastas más, baja. Lo que ya estaba apartado (pagar un plan, debitar una suscripción o la tarjeta) no cuenta como gasto de hoy.', '¿Cómo se calcula?')}
   </div>`;
 }
 function heroDetalleTodos(){
@@ -4369,12 +4386,11 @@ function heroDetalleTodos(){
   const tc = cuentas.reduce((t,c)=>t+calcularTarjetaPendienteSinPlan(c.id),0);
   const hoy = cuentas.reduce((t,c)=>{ const h=hoyCuenta(c.id); return t + (h.libreReal<=0?0:Math.max(0,h.quedaHoy)); },0);
   return `<div class="hero-detalle">
-    ${heroFila('sobre','Libre', heroB(sum('disponible')))}
-    ${cuentas.length>1?heroFila('visual','Hoy pueden gastar', heroB(hoy), 'Sumando lo de cada uno'):''}
-    ${heroFila('movs','Planificado', heroB(sum('porPagar')), sum('porPagarSubs')>0.004?`incluye ${q(sum('porPagarSubs'))} de suscripciones`:'')}
-    ${tc>0.004?heroFila('tarjeta','Por pagar de tarjeta', heroB(tc)):''}
-    ${heroFila('ahorro','Ahorrado', heroB(sum('saldoAhorro')))}
-    ${ayuda('El total es el dinero que hay de verdad en las cuentas (sin lo ahorrado). Toca el nombre de cada uno para ver su detalle.', '¿Qué es cada número?')}
+    ${heroFila('sobre','Libre', heroB(sum('disponible'), 'p_todos_libre'))}
+    ${heroFila('visual','Hoy', heroB(hoy, 'p_todos_hoy'))}
+    ${heroFila('movs','Planificado', heroB(sum('porPagar'), 'p_todos_plan'), sum('porPagarSubs')>0.004?`Incluye ${q(sum('porPagarSubs'))} de suscripciones que faltan este mes.`:'')}
+    ${heroFila('tarjeta','Por pagar de tarjeta', heroB(tc, 'p_todos_tc'))}
+    ${heroFila('ahorro','Ahorrado', heroB(sum('saldoAhorro'), 'p_todos_aho'))}
   </div>`;
 }
 function renderHoy(){
