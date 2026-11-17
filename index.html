@@ -156,6 +156,27 @@
   .field .hc-propio input{ width:58px; padding:5px 6px; font-size:16px; text-align:right; }
   .hc-propio .btn{ padding:4px 8px; }
   .hc-resumen{ background:var(--card); border-radius:16px; padding:14px; box-shadow:var(--shadow-md); }
+  .hc-cab{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
+  .field input.hc-buscar{ margin-bottom:10px; }
+  .hc-grupo{ font-size:12px; font-weight:700; color:var(--text-soft); text-transform:uppercase; letter-spacing:.04em; margin:6px 2px 8px; }
+  .hc-vacio{ font-size:13px; color:var(--text-soft); font-weight:600; padding:10px 4px; }
+  .hc-barra{ position:sticky; bottom:calc(-32px - env(safe-area-inset-bottom)); z-index:2;
+    margin:16px -20px calc(-32px - env(safe-area-inset-bottom)); padding:12px 20px calc(16px + env(safe-area-inset-bottom));
+    background:var(--card); border-top:1px solid var(--line); border-radius:20px 20px 0 0; box-shadow:0 -8px 24px rgba(0,0,0,.10); }
+  .hc-barra-vacia{ font-size:13px; font-weight:600; color:var(--text-soft); text-align:center; padding:4px 0; }
+  .hc-barra-top{ display:flex; justify-content:space-between; align-items:center; width:100%; background:none; border:none; padding:0; margin-bottom:6px;
+    font-family:var(--font); font-size:13px; font-weight:600; color:var(--text-soft); cursor:pointer; }
+  .hc-barra-top b{ color:var(--text); }
+  .hc-barra-ver{ display:inline-flex; align-items:center; gap:3px; font-weight:700; color:var(--brand); }
+  html[data-modo="oscuro"] .hc-barra-ver{ color:var(--text); }
+  .hc-barra-final{ font-size:15.5px; line-height:1.45; margin-bottom:6px; }
+  .hc-barra-libres{ display:flex; flex-wrap:wrap; align-items:center; gap:4px 14px; font-size:13px; font-weight:600; color:var(--text-soft); }
+  .hc-barra-libres span{ display:inline-flex; align-items:center; gap:5px; }
+  .hc-barra-libres b{ color:var(--text); }
+  .hc-barra-libres small{ font-size:11.5px; }
+  .hc-barra-det{ font-size:12.5px; color:var(--text-soft); font-weight:600; line-height:1.55; margin-top:8px; padding-top:8px; border-top:1px solid var(--line); }
+  .hc-barra-btns{ display:flex; gap:8px; margin-top:10px; }
+  .hc-barra-btns .btn{ flex:1; padding:12px 10px; }
   .hc-res-titulo{ font-weight:700; font-size:15px; margin-bottom:8px; }
   .hc-res-fila{ display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 10px; padding:8px 0; border-bottom:1px solid var(--line); font-size:13px; }
   .hc-res-nombre{ font-weight:700; display:inline-flex; align-items:center; gap:6px; min-width:90px; }
@@ -3872,7 +3893,7 @@ function renderAjustesForm(){
     ${ESPACIO_CIFRADO ? `<button class="btn btn-ghost" style="width:100%; margin-bottom:12px;" onclick="abrirPrivacidad()">${ic('candado',16)} Privacidad y clave</button>` : ''}
     ${ESPACIO_LEGACY ? `<button class="btn btn-ghost" style="width:100%; margin-bottom:12px;" onclick="abrirInvitaciones()">${ic('invitar',16)} Invitar a alguien</button>` : ''}
     <button class="btn btn-primary" onclick="guardarAjustes()">Guardar ajustes</button>
-    <div class="hint" style="text-align:center; margin:14px 0 0;">Versión 6 nov 2026 · v4 · invitaciones y cifrado${ESPACIO_CIFRADO ? ' · 🔒 espacio cifrado' : ''}</div>`;
+    <div class="hint" style="text-align:center; margin:14px 0 0;">Versión 17 nov 2026 · v5 · hacer cuentas${ESPACIO_CIFRADO ? ' · 🔒 espacio cifrado' : ''}</div>`;
 }
 function agregarCuentaBorrador(){
   const b = ajustesBorrador; if(b.cuentas.length>=MAX_CUENTAS) return;
@@ -4735,7 +4756,7 @@ function gastosParaCuentas(){
 }
 function abrirHacerCuentas(){
   if(cuentas.length<2){ alert("Necesitas al menos 2 cuentas para hacer cuentas."); return; }
-  hc = { part: cuentas.map(c=>c.id), modo:'libre', global:{}, sel:{}, propio:{} };
+  hc = { part: cuentas.map(c=>c.id), modo:'libre', global:{}, sel:{}, propio:{}, min:false, q:'', detalle:false };
   hcRecalcularGlobal();
   document.getElementById('modalTitle').textContent = "🧮 Hacer cuentas";
   renderHacerCuentas();
@@ -4816,43 +4837,81 @@ function renderHacerCuentas(){
         <div class="div-nota">${hc.modo==='libre'?'Según lo libre de cada uno antes de estos gastos.':''}${hcSumaOk(hc.global)?'':` <span class="ocr-dup">Suman ${hcSuma(hc.global)}%, deben sumar 100%.</span>`}</div>
       </div></div>
 
-    <div class="field"><label>Gastos de los últimos 60 días (${Object.keys(hc.sel).filter(k=>hc.sel[k]).length} elegidos)</label>
-      ${lista.length ? lista.map(g=>{
-        const on = !!hc.sel[g.id], pc = hcPctsDe(g.id);
-        return `<div class="hc-gasto ${on?'on':''}">
-          <label class="hc-fila"><input type="checkbox" ${on?'checked':''} onchange="hcToggle('${g.id}', this.checked)">
-            <span class="hc-txt"><b>${esc(g.descripcion)||'(sin descripción)'}</b>
-              <small>${fechaHora(g)} · pagó <span class="dot" style="background:${colorCuenta(g.quienPaga)[0]}"></span> ${esc(nombreCuenta(g.quienPaga))}</small></span>
-            <span class="num">${q(g.monto)}</span></label>
-          ${on ? `<div class="hc-reparto">${repartoMonto('dividido', hc.part, pc, Number(g.monto||0)).map(x=>
-              `<span><span class="dot" style="background:${colorCuenta(x.id)[0]}"></span>${esc(nombreCuenta(x.id))} ${pc[x.id]}% · ${q(x.monto)}</span>`).join('')}
-            ${dos ? `<span class="hc-propio">${esc(nombreCuenta(hc.part[0]))} <input type="number" inputmode="numeric" min="0" max="100" step="1" value="${pc[hc.part[0]]}" onchange="hcPctPropio('${g.id}', this.value)"> %
-              ${hc.propio[g.id]?`<button class="btn btn-ghost btn-small" onclick="hcQuitarPropio('${g.id}')">↺</button>`:''}</span>` : ''}
-          </div>` : ''}
-        </div>`;
-      }).join('') : `<div class="ocr-estado">No hay gastos de una sola cuenta en los últimos 60 días.</div>`}
+    <div class="field" style="margin-bottom:0;">
+      <div class="hc-cab">
+        <label style="margin:0;">Gastos de los últimos 60 días</label>
+        <button class="btn btn-ghost btn-small" onclick="hcMinimizar()">${hc.min ? `Mostrar todos (${lista.length})` : 'Minimizar'}</button>
+      </div>
+      ${hc.min ? '' : `<input type="search" id="hc_buscar" class="hc-buscar" placeholder="Buscar por nombre o monto" value="${esc(hc.q)}" oninput="hcBuscar(this.value)" autocomplete="off">`}
+      <div id="hcLista"></div>
     </div>
-
-    ${r.sel.length ? `
-    <div class="hc-resumen">
-      <div class="hc-res-titulo">Así quedaría</div>
-      ${cuentas.filter(c=>hc.part.includes(c.id) || r.pago[c.id]>0).map(c=>`
-        <div class="hc-res-fila">
-          <span class="hc-res-nombre"><span class="dot" style="background:${colorCuenta(c.id)[0]}"></span> ${esc(c.nombre)}</span>
-          <span class="hc-res-det">Pagó ${q(r.pago[c.id])} · le toca ${q(r.toca[c.id])}</span>
-          <span class="hc-res-libre">Libre ${q(r.antes[c.id])} → <b class="num" style="${r.despues[c.id]<0?'color:var(--danger)':''}">${q(r.despues[c.id])}</b></span>
-        </div>`).join('')}
-      <div class="hc-res-final">${r.deudas.length
-        ? r.deudas.map(d=>`💸 <b>${esc(nombreCuenta(d.de))}</b> le pasa <b>${q(d.monto)}</b> a <b>${esc(nombreCuenta(d.a))}</b>`).join('<br>')
-        : '✓ Ya están a mano con estos gastos.'}</div>
-      ${cuentas.some(c=>r.despues[c.id]<0)?`<div class="ocr-dup" style="margin-top:6px;">Alguien queda en negativo. Prueba moviendo los porcentajes.</div>`:''}
-    </div>
-    <div class="actions-row" style="margin-top:14px;">
-      <button class="btn btn-primary" style="flex:1;" onclick="aplicarHacerCuentas('pagado')">✅ Ya nos pusimos a mano</button>
-      ${r.deudas.length?`<button class="btn btn-ghost" style="flex:1;" onclick="aplicarHacerCuentas('pendiente')">⏳ Lo pasa después</button>`:''}
-    </div>` : ''}`;
+    ${hcBarraHTML(r)}`;
+  renderHcLista();
   if(body.parentElement) body.parentElement.scrollTop = scroll;
 }
+// Una fila de gasto en la lista (con su reparto si está elegido).
+function hcGastoHTML(g){
+  const on = !!hc.sel[g.id], pc = hcPctsDe(g.id), dos = hc.part.length===2;
+  return `<div class="hc-gasto ${on?'on':''}">
+    <label class="hc-fila"><input type="checkbox" ${on?'checked':''} onchange="hcToggle('${g.id}', this.checked)">
+      <span class="hc-txt"><b>${esc(g.descripcion)||'(sin descripción)'}</b>
+        <small>${fechaHora(g)} · pagó <span class="dot" style="background:${colorCuenta(g.quienPaga)[0]}"></span> ${esc(nombreCuenta(g.quienPaga))}</small></span>
+      <span class="num">${qh(g.monto)}</span></label>
+    ${on ? `<div class="hc-reparto">${repartoMonto('dividido', hc.part, pc, Number(g.monto||0)).map(x=>
+        `<span><span class="dot" style="background:${colorCuenta(x.id)[0]}"></span>${esc(nombreCuenta(x.id))} ${pc[x.id]}% · ${q(x.monto)}</span>`).join('')}
+      ${dos ? `<span class="hc-propio">${esc(nombreCuenta(hc.part[0]))} <input type="number" inputmode="numeric" min="0" max="100" step="1" value="${pc[hc.part[0]]}" onchange="hcPctPropio('${g.id}', this.value)"> %
+        ${hc.propio[g.id]?`<button class="btn btn-ghost btn-small" onclick="hcQuitarPropio('${g.id}')">↺</button>`:''}</span>` : ''}
+    </div>` : ''}
+  </div>`;
+}
+// Elegidos siempre arriba (nunca se esconden); el resto se puede minimizar o buscar.
+function hcCoincide(g, t){
+  if(!t) return true;
+  const n = t.replace(/[^\d.]/g,'');
+  return (g.descripcion||'').toLowerCase().includes(t) || nombreCuenta(g.quienPaga).toLowerCase().includes(t)
+    || (n && String(Number(g.monto||0).toFixed(2)).includes(n));
+}
+function renderHcLista(){
+  const cont = document.getElementById('hcLista'); if(!cont || !hc) return;
+  const lista = gastosParaCuentas();
+  if(!lista.length){ cont.innerHTML = `<div class="ocr-estado">No hay gastos de una sola cuenta en los últimos 60 días.</div>`; return; }
+  const elegidos = lista.filter(g=>hc.sel[g.id]);
+  const t = (hc.q||'').trim().toLowerCase();
+  const resto = lista.filter(g=>!hc.sel[g.id] && hcCoincide(g, t));
+  let h = '';
+  if(elegidos.length) h += `<div class="hc-grupo">Elegidos (${elegidos.length})</div>` + elegidos.map(hcGastoHTML).join('');
+  if(hc.min){
+    if(!elegidos.length) h += `<div class="hc-vacio">Lista minimizada. Toca «Mostrar todos» para elegir gastos.</div>`;
+  } else {
+    h += `<div class="hc-grupo">${elegidos.length ? 'Por elegir' : 'Elige los que se van a repartir'}${t ? ` · ${resto.length} encontrados` : ''}</div>`;
+    h += resto.length ? resto.map(hcGastoHTML).join('') : `<div class="hc-vacio">Ningún gasto coincide con «${esc(hc.q)}».</div>`;
+  }
+  cont.innerHTML = h;
+}
+// Barra fija abajo: siempre se ve cómo va quedando, sin tener que bajar.
+function hcBarraHTML(r){
+  if(!r.sel.length) return `<div class="hc-barra"><div class="hc-barra-vacia">Elige gastos y aquí verás quién le pasa cuánto a quién.</div></div>`;
+  const quienes = cuentas.filter(c=>hc.part.includes(c.id) || r.pago[c.id]>0);
+  return `<div class="hc-barra">
+    <button class="hc-barra-top" onclick="hcDetalle()" aria-expanded="${hc.detalle}">
+      <span>${r.sel.length} gasto${r.sel.length===1?'':'s'} · <b class="num">${qh(r.total)}</b></span>
+      <span class="hc-barra-ver">${hc.detalle ? 'Menos' : 'Detalle'} ${ic('chev',14).replace('class="ico"', `class="ico" style="transform:rotate(${hc.detalle?180:0}deg); transition:transform .2s;"`)}</span>
+    </button>
+    <div class="hc-barra-final">${r.deudas.length
+      ? r.deudas.map(d=>`<b>${esc(nombreCuenta(d.de))}</b> le pasa <b class="num">${q(d.monto)}</b> a <b>${esc(nombreCuenta(d.a))}</b>`).join('<br>')
+      : '✓ Ya están a mano con estos gastos.'}</div>
+    <div class="hc-barra-libres">${quienes.map(c=>`<span><span class="dot" style="background:${colorCuenta(c.id)[0]}"></span>${esc(c.nombre)} <b class="num" style="${r.despues[c.id]<0?'color:var(--danger)':''}">${q(r.despues[c.id])}</b></span>`).join('')}<small>libre después</small></div>
+    ${hc.detalle ? `<div class="hc-barra-det">${quienes.map(c=>`<div><b>${esc(c.nombre)}</b>: pagó ${q(r.pago[c.id])} · le toca ${q(r.toca[c.id])} · libre ${q(r.antes[c.id])} → ${q(r.despues[c.id])}</div>`).join('')}</div>` : ''}
+    ${cuentas.some(c=>r.despues[c.id]<0)?`<div class="ocr-dup" style="margin-top:4px;">Alguien queda en negativo. Prueba moviendo los porcentajes.</div>`:''}
+    <div class="hc-barra-btns">
+      <button class="btn btn-primary" onclick="aplicarHacerCuentas('pagado')">Ya nos pusimos a mano</button>
+      ${r.deudas.length?`<button class="btn btn-ghost" onclick="aplicarHacerCuentas('pendiente')">Lo pasa después</button>`:''}
+    </div>
+  </div>`;
+}
+function hcMinimizar(){ hc.min = !hc.min; renderHacerCuentas(); }
+function hcBuscar(v){ hc.q = v; renderHcLista(); }
+function hcDetalle(){ hc.detalle = !hc.detalle; renderHacerCuentas(); }
 function hcSuma(p){ return hc.part.reduce((t,i)=>t+(Number(p[i])||0),0); }
 function hcSumaOk(p){ return hcSuma(p)===100; }
 function hcCambiarPart(id, on){
