@@ -353,6 +353,56 @@
   html[data-modo="oscuro"] main .receipt.abierto{ background:var(--seg-bg); }
   .receipt-row{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
   .receipt-title{ font-weight:700; font-size:15px; }
+  /* sin zoom por doble toque (iPhone); el zoom con dos dedos sigue funcionando */
+  html, body, button, a, input, select, textarea, label, .receipt{ touch-action:manipulation; }
+  @supports (-webkit-touch-callout: none){ input, select, textarea{ font-size:max(16px, 1em); } }
+  .filtros-gastos{ display:flex; gap:8px; margin-bottom:12px; }
+  .fg-buscar, .fg-sel{ min-width:0; box-sizing:border-box; height:46px; border:1.5px solid var(--line); border-radius:14px; background-color:var(--input-bg);
+    color:var(--text); font-family:var(--font); font-size:16px; font-weight:600; -webkit-appearance:none; appearance:none; }
+  .fg-buscar{ flex:1 1 0; width:0; padding:0 4px 0 30px; background-repeat:no-repeat; background-position:9px 50%; background-size:15px;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M20 20l-3.5-3.5'/%3E%3C/svg%3E"); }
+  .fg-buscar::placeholder{ color:var(--text-soft); font-weight:600; font-size:13.5px; }
+  /* El botón muestra el texto; encima hay un select invisible que abre la lista del celular. */
+  .fg-sel{ position:relative; flex:0 0 auto; max-width:34%; display:flex; align-items:center; padding:0 21px 0 10px; font-size:14.5px; cursor:pointer;
+    background-image: linear-gradient(45deg, transparent 50%, var(--text-soft) 50%), linear-gradient(135deg, var(--text-soft) 50%, transparent 50%);
+    background-position: calc(100% - 13px) 52%, calc(100% - 8px) 52%; background-size:5px 5px; background-repeat:no-repeat; }
+  .fg-txt{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .fg-sel select{ position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; font-size:16px; border:none; -webkit-appearance:none; appearance:none; }
+  .fg-sel.on{ border-color:var(--brand); color:var(--brand); font-weight:700; }
+  html[data-modo="oscuro"] .fg-sel.on{ border-color:var(--text); color:var(--text); }
+  .fg-buscar:focus, .fg-sel:focus{ outline:none; border-color:var(--brand); }
+  .rc-izq{ min-width:0; flex:1; }
+  .rc-titulo{ display:flex; align-items:center; gap:6px; min-width:0; flex-wrap:wrap; }
+  .rc-desc{ min-width:0; overflow:hidden; text-overflow:ellipsis; }
+  .rc-linea{ display:flex; align-items:center; gap:5px; }
+  .rc-linea .dot{ width:8px; height:8px; flex-shrink:0; }
+  .rc-linea .dot + .dot{ margin-left:-3px; }
+  .rc-der{ text-align:right; flex-shrink:0; max-width:46%; display:flex; flex-direction:column; align-items:flex-end; }
+  .rc-cat{ font-size:12px; color:var(--text-soft); font-weight:600; margin-top:3px; max-width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rc-cat.sin{ color:var(--warn-fg); }
+  .mini{ flex-shrink:0; display:inline-flex; align-items:center; gap:3px; font-size:10.5px; font-weight:700; padding:2px 7px; border-radius:999px;
+    background:var(--seg-bg); color:var(--text-soft); letter-spacing:.02em; white-space:nowrap; }
+  .mini.plan{ background:rgba(var(--brand-rgb),.12); color:var(--brand); }
+  html[data-modo="oscuro"] .mini.plan{ background:var(--seg-bg); color:var(--text); }
+  .mini.flag{ background:#FCE3D2; color:#A9471B; }
+  html[data-modo="oscuro"] .mini.flag{ background:#4A2C1E; color:#F4B08A; }
+  .hc-flag{ color:#C2571F; display:inline-flex; vertical-align:-1px; margin-right:4px; }
+  .hc-grupo-flag{ display:flex; align-items:center; justify-content:space-between; color:#B4501E; }
+  html[data-modo="oscuro"] .hc-grupo-flag, html[data-modo="oscuro"] .hc-flag{ color:#F4B08A; }
+  .hc-grupo-flag span{ display:inline-flex; align-items:center; gap:4px; }
+  .hc-grupo-flag .btn{ text-transform:none; letter-spacing:0; }
+  .cat2-box{ margin-top:10px; padding:12px; border-radius:14px; background:var(--card); border:1.5px dashed var(--line); }
+  .field input.cat-slider{ -webkit-appearance:none; appearance:none; width:100%; height:14px; padding:0; border:none; border-radius:999px; margin:16px 0 10px;
+    background:linear-gradient(to right, var(--brand) var(--p, 50%), #E0A458 var(--p, 50%)); }
+  .cat-slider::-webkit-slider-thumb{ -webkit-appearance:none; appearance:none; width:30px; height:30px; border-radius:50%; background:#fff; border:3px solid var(--text); box-shadow:0 2px 8px rgba(0,0,0,.25); cursor:grab; }
+  .cat-slider::-moz-range-thumb{ width:26px; height:26px; border-radius:50%; background:#fff; border:3px solid var(--text); box-shadow:0 2px 8px rgba(0,0,0,.25); cursor:grab; }
+  .cat-rep{ display:flex; justify-content:space-between; gap:10px; font-size:12.5px; }
+  .cat-rep > div{ display:flex; flex-direction:column; min-width:0; max-width:50%; }
+  .cat-rep > div:last-child{ align-items:flex-end; text-align:right; }
+  .cat-rep b{ font-weight:700; display:inline-flex; align-items:center; gap:5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+  .cat-rep small{ color:var(--text-soft); font-weight:700; font-size:12px; }
+  .cat-punto{ width:9px; height:9px; border-radius:50%; flex-shrink:0; display:inline-block; }
+  .cat2-btn{ margin-top:8px; }
   .receipt-sub{ font-size:12.5px; color:var(--text-soft); margin-top:2px; font-weight:600; }
   .receipt-amount{ font-weight:700; font-size:15px; white-space:nowrap; }
   .tag{
@@ -620,22 +670,17 @@
       <div id="mov-gastos" class="mov-panel" style="display:none;">
         <button class="btn btn-ghost" style="width:100%; margin-bottom:12px;" onclick="abrirHacerCuentas()">🧮 Hacer cuentas</button>
         <div id="cuentasPendientesBanner"></div>
-        <div class="field" style="margin-bottom:10px;">
-          <input id="gastoBuscar" type="text" placeholder="🔍 Buscar por nombre o monto (ej. 182)" oninput="renderGastos()">
+        <div class="filtros-gastos" id="filtrosGastos">
+          <input id="gastoBuscar" class="fg-buscar" type="search" placeholder="Nombre o monto" autocomplete="off" oninput="renderGastos()">
+          <label class="fg-sel" id="fgCat"><span class="fg-txt" id="fgCatTxt">Categoría</span>
+            <select id="gastoCategoriaFiltro" aria-label="Categoría" onchange="filtroCategoriaGasto = this.value || null; renderGastos();">
+              <option value="">Categoría</option>
+            </select></label>
+          <label class="fg-sel" id="fgCta"><span class="fg-txt" id="fgCtaTxt">Todas</span>
+            <select id="gastoCuentaFiltro" aria-label="Cuentas" onchange="personaGastoFiltro = this.value || 'Todos'; renderGastos();">
+              <option value="Todos">Todas</option>
+            </select></label>
         </div>
-        <div class="field" style="margin-bottom:10px;">
-          <select id="gastoCategoriaFiltro" onchange="filtroCategoriaGasto = this.value || null; renderGastos();">
-            <option value="">Todas las categorías</option>
-          </select>
-        </div>
-        <div class="segmented" id="capaSegmented">
-          <button class="active" data-capa="Todos" onclick="switchCapaFiltro('Todos')">Todos</button>
-          <button data-capa="Pareja" onclick="switchCapaFiltro('Pareja')">🏠 Compartido</button>
-          <button data-capa="Personal" onclick="switchCapaFiltro('Personal')">🙋 Personal</button>
-          <button data-capa="SinCategoria" onclick="switchCapaFiltro('SinCategoria')">⚠️ Sin categoría</button>
-        </div>
-        <div class="segmented" id="personaGastoSegmented"></div>
-        <div id="filtroCategoriaBanner"></div>
         <div id="gastosList"></div>
       </div>
 
@@ -711,8 +756,8 @@
       <div id="comp-suscripciones" class="comp-panel" style="display:none;">
         <div id="subsResumen"></div>
         <div class="segmented" id="subsOrdenSegmented">
-          <button class="active" data-orden="precio" onclick="switchSubsOrden('precio')">Más cara</button>
-          <button data-orden="calendario" onclick="switchSubsOrden('calendario')">Por calendario</button>
+          <button class="active" data-orden="calendario" onclick="switchSubsOrden('calendario')">Por calendario</button>
+          <button data-orden="precio" onclick="switchSubsOrden('precio')">Más cara</button>
         </div>
         <div id="subsList"></div>
       </div>
@@ -1844,10 +1889,15 @@ function entrarAlApp(){
   switchView('visual');
   startListeners();
 }
+// Nombre de la categoría sin el emoji, para ordenar alfabéticamente.
+function nombreCatSinEmoji(c){ return String(c||'').replace(/^[^\p{L}\p{N}]+/u,'').trim(); }
+const CAT_SIN = '__sin';
 function llenarFiltroCategorias(){
+  const orden = CATEGORIAS.slice().sort((a,b)=>nombreCatSinEmoji(a).localeCompare(nombreCatSinEmoji(b), 'es'));
   document.getElementById('gastoCategoriaFiltro').innerHTML =
-    `<option value="">Todas las categorías</option>` +
-    CATEGORIAS.map(c=>`<option value="${c}">${c}</option>`).join("");
+    `<option value="">Categoría</option>` +
+    orden.map(c=>`<option value="${c}">${c}</option>`).join("") +
+    `<option value="${CAT_SIN}">⚠️ Sin categoría</option>`;
 }
 function saludoHora(d){
   const h = (d||new Date()).getHours();
@@ -1886,7 +1936,7 @@ let currentView = 'visual';
 let currentMovSegment = 'ingresos';
 let currentAhoSegment = 'movs';
 let currentCompSegment = 'tarjeta';
-let subsOrden = 'precio';
+let subsOrden = 'calendario';
 let currentCapaFiltro = 'Todos';
 let personaGastoFiltro = 'Todos';
 let filtroCategoriaGasto = null;
@@ -1947,12 +1997,7 @@ function switchSubsOrden(orden){
   document.querySelector('#subsOrdenSegmented button[data-orden="'+orden+'"]').classList.add('active');
   renderSuscripciones();
 }
-function switchCapaFiltro(capa){
-  currentCapaFiltro = capa;
-  document.querySelectorAll('#capaSegmented button').forEach(b=>b.classList.remove('active'));
-  document.querySelector('#capaSegmented button[data-capa="'+capa+'"]').classList.add('active');
-  renderGastos();
-}
+function switchCapaFiltro(capa){ currentCapaFiltro = capa; renderGastos(); }
 function switchPersonaGastoFiltro(id){
   personaGastoFiltro = id;
   renderGastos();
@@ -2047,7 +2092,7 @@ function renderAll(){
 
 // ================= HELPERS =================
 function q(m){ return "Q\u00A0" + Number(m||0).toLocaleString('es-GT',{minimumFractionDigits:2, maximumFractionDigits:2}); }
-const IC_PATHS = {"tortuga": "<path d=\"M4 15c0-4 3.6-7 8-7s8 3 8 7z\"/><path d=\"M8 15l-1 3M16 15l1 3\"/><path d=\"M20 13h1.5a1.5 1.5 0 0 0 0-3H20\"/><path d=\"M9 9.5l3 5.5 3-5.5\"/>", "ajustes": "<circle cx=\"12\" cy=\"12\" r=\"3\"/><path d=\"M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z\"/>", "salir": "<path d=\"M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4\"/><path d=\"M16 17l5-5-5-5\"/><path d=\"M21 12H9\"/>", "mas": "<path d=\"M12 5v14M5 12h14\"/>", "visual": "<path d=\"M4 20V11M10 20V5M16 20v-7M21 20H3\"/>", "movs": "<path d=\"M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01\"/>", "tarjeta": "<rect x=\"2\" y=\"5\" width=\"20\" height=\"14\" rx=\"2\"/><path d=\"M2 10h20M6 15h4\"/>", "ahorro": "<path d=\"M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 0 3 2 4.5V20h4v-2h3v2h4v-4c1-.5 1.7-1 2-2h2v-4h-2c0-1-.5-1.5-1-2V5z\"/><path d=\"M2 9v1c0 1.1.9 2 2 2h1\"/><path d=\"M16 11h.01\"/>", "editar": "<path d=\"M12 20h9\"/><path d=\"M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z\"/>", "basura": "<path d=\"M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6\"/>", "chev": "<path d=\"M6 9l6 6 6-6\"/>", "balanza": "<path d=\"M12 3v18M8 21h8M5 7h14M7 7l-3 7a3 3 0 0 0 6 0zM17 7l-3 7a3 3 0 0 0 6 0z\"/>", "sobre": "<rect x=\"3\" y=\"5\" width=\"18\" height=\"14\" rx=\"2\"/><path d=\"M3 7l9 6 9-6\"/>", "candado": "<rect x=\"4\" y=\"11\" width=\"16\" height=\"10\" rx=\"2\"/><path d=\"M8 11V7a4 4 0 0 1 8 0v4\"/>", "llave": "<circle cx=\"7.5\" cy=\"15.5\" r=\"4.5\"/><path d=\"M10.7 12.3L21 2M16 7l3 3M18.5 4.5l2 2\"/>", "copiar": "<rect x=\"9\" y=\"9\" width=\"12\" height=\"12\" rx=\"2\"/><path d=\"M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1\"/>", "compartir": "<path d=\"M12 3v12M7 8l5-5 5 5\"/><path d=\"M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7\"/>", "invitar": "<path d=\"M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2\"/><circle cx=\"9\" cy=\"7\" r=\"4\"/><path d=\"M19 8v6M16 11h6\"/>"};
+const IC_PATHS = {"tortuga": "<path d=\"M4 15c0-4 3.6-7 8-7s8 3 8 7z\"/><path d=\"M8 15l-1 3M16 15l1 3\"/><path d=\"M20 13h1.5a1.5 1.5 0 0 0 0-3H20\"/><path d=\"M9 9.5l3 5.5 3-5.5\"/>", "ajustes": "<circle cx=\"12\" cy=\"12\" r=\"3\"/><path d=\"M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z\"/>", "salir": "<path d=\"M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4\"/><path d=\"M16 17l5-5-5-5\"/><path d=\"M21 12H9\"/>", "mas": "<path d=\"M12 5v14M5 12h14\"/>", "visual": "<path d=\"M4 20V11M10 20V5M16 20v-7M21 20H3\"/>", "movs": "<path d=\"M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01\"/>", "tarjeta": "<rect x=\"2\" y=\"5\" width=\"20\" height=\"14\" rx=\"2\"/><path d=\"M2 10h20M6 15h4\"/>", "ahorro": "<path d=\"M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 0 3 2 4.5V20h4v-2h3v2h4v-4c1-.5 1.7-1 2-2h2v-4h-2c0-1-.5-1.5-1-2V5z\"/><path d=\"M2 9v1c0 1.1.9 2 2 2h1\"/><path d=\"M16 11h.01\"/>", "editar": "<path d=\"M12 20h9\"/><path d=\"M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z\"/>", "basura": "<path d=\"M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6\"/>", "chev": "<path d=\"M6 9l6 6 6-6\"/>", "balanza": "<path d=\"M12 3v18M8 21h8M5 7h14M7 7l-3 7a3 3 0 0 0 6 0zM17 7l-3 7a3 3 0 0 0 6 0z\"/>", "sobre": "<rect x=\"3\" y=\"5\" width=\"18\" height=\"14\" rx=\"2\"/><path d=\"M3 7l9 6 9-6\"/>", "candado": "<rect x=\"4\" y=\"11\" width=\"16\" height=\"10\" rx=\"2\"/><path d=\"M8 11V7a4 4 0 0 1 8 0v4\"/>", "llave": "<circle cx=\"7.5\" cy=\"15.5\" r=\"4.5\"/><path d=\"M10.7 12.3L21 2M16 7l3 3M18.5 4.5l2 2\"/>", "copiar": "<rect x=\"9\" y=\"9\" width=\"12\" height=\"12\" rx=\"2\"/><path d=\"M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1\"/>", "compartir": "<path d=\"M12 3v12M7 8l5-5 5 5\"/><path d=\"M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7\"/>", "invitar": "<path d=\"M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2\"/><circle cx=\"9\" cy=\"7\" r=\"4\"/><path d=\"M19 8v6M16 11h6\"/>", "bandera": "<path d=\"M5 21V4\"/><path d=\"M5 4h12l-2.5 4L17 12H5\"/>"};
 function ic(k, size){ size = size||16; return `<svg class="ico" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC_PATHS[k]||''}</svg>`; }
 const IC = { edit: ic('editar',15), trash: ic('basura',15) };
 // Monto con los decimales más claros (solo para mostrar en pantalla, no en textos ni alertas).
@@ -2097,6 +2142,82 @@ const CATEGORIAS_INGRESO = ["💰 Salario","🎁 Regalo recibido","🔁 Reembols
 const CAT_COLORS = ['#B38D97','#564256','#3581B8','#7FB8DD','#9B4351','#8FD4C1','#7A6B7A','#C9A0AC','#264653','#E6C79C','#8AA399','#D9C6DA','#5E7F9A','#A7A7AD'];
 function opcionesCategoria(lista, seleccionada){ return lista.map(c=>`<option ${c===seleccionada?'selected':''}>${c}</option>`).join(""); }
 
+// ----- Un gasto puede repartirse entre dos categorías (aproximado) -----
+// Se guarda categorias:[{cat,pct},{cat,pct}] y en "categoria" queda la que tiene más porcentaje
+// (así todo lo que solo mira una categoría sigue funcionando).
+function catsDe(g){
+  if(g && Array.isArray(g.categorias) && g.categorias.length>1)
+    return g.categorias.filter(c=>c && c.cat).map(c=>({ cat:c.cat, pct:Number(c.pct)||0 }));
+  return [{ cat:(g && g.categoria) || '', pct:100 }];
+}
+function fraccionCat(g, cat){ return catsDe(g).filter(c=>c.cat===cat).reduce((t,c)=>t+c.pct,0)/100; }
+function tieneCat(g, cat){ return catsDe(g).some(c=>c.cat===cat); }
+const CAT_C1 = 'var(--brand)', CAT_C2 = '#E0A458';
+function campoCategorias(lista, g){
+  const cats = g && Array.isArray(g.categorias) && g.categorias.length>1 ? g.categorias : null;
+  const c1 = cats ? cats[0].cat : ((g && g.categoria) || null);
+  const c2 = cats ? cats[1].cat : (lista.find(c=>c!==(c1||lista[0])) || lista[1]);
+  const p1 = cats ? Math.round(Number(cats[0].pct)||50) : 50;
+  return `<div class="field"><label>Categoría</label>
+    <select id="f_cat" onchange="pintarRepartoCat()">${opcionesCategoria(lista, c1)}</select>
+    <div id="cat2Box" class="cat2-box" style="${cats?'':'display:none;'}">
+      <select id="f_cat2" onchange="pintarRepartoCat()">${opcionesCategoria(lista, c2)}</select>
+      <input type="range" class="cat-slider" id="f_catpct" min="5" max="95" step="5" value="${p1}" oninput="pintarRepartoCat()" aria-label="Cuánto es de cada categoría">
+      <div class="cat-rep"><div id="catRep1"></div><div id="catRep2"></div></div>
+      <button type="button" class="acc-link" style="padding-top:6px;" onclick="quitarCat2()">Quitar la segunda categoría</button>
+    </div>
+    <button type="button" class="btn btn-ghost btn-small cat2-btn" id="cat2Btn" style="${cats?'display:none;':''}" onclick="agregarCat2()">+ Otra categoría en este gasto</button>
+  </div>`;
+}
+function cat2Activa(){ const b = document.getElementById('cat2Box'); return !!(b && b.style.display!=='none'); }
+function agregarCat2(){
+  const b = document.getElementById('cat2Box'); if(!b) return;
+  b.style.display = ''; document.getElementById('cat2Btn').style.display = 'none';
+  const c1 = document.getElementById('f_cat'), c2 = document.getElementById('f_cat2');
+  if(c1 && c2 && c2.value===c1.value){ const otra = [...c2.options].find(o=>o.value!==c1.value); if(otra) c2.value = otra.value; }
+  pintarRepartoCat();
+}
+function quitarCat2(){
+  const b = document.getElementById('cat2Box'); if(!b) return;
+  b.style.display = 'none'; document.getElementById('cat2Btn').style.display = '';
+  pintarRepartoCat();
+}
+function pintarRepartoCat(){
+  const r1 = document.getElementById('catRep1'), r2 = document.getElementById('catRep2'), sl = document.getElementById('f_catpct');
+  if(r1 && r2 && sl){
+    const p = Number(sl.value)||50, monto = parseFloat((document.getElementById('f_monto')||{}).value)||0;
+    sl.style.setProperty('--p', p + '%');
+    const c1 = document.getElementById('f_cat').value, c2 = document.getElementById('f_cat2').value;
+    r1.innerHTML = `<b><span class="cat-punto" style="background:${CAT_C1}"></span>${esc(c1)}</b><small>${p}%${monto?` · ${q(monto*p/100)}`:''}</small>`;
+    r2.innerHTML = `<b>${esc(c2)}<span class="cat-punto" style="background:${CAT_C2}"></span></b><small>${100-p}%${monto?` · ${q(monto*(100-p)/100)}`:''}</small>`;
+    const igual = c1===c2;
+    r2.querySelector('small').innerHTML += igual ? ' <span class="ocr-dup">elige otra</span>' : '';
+  }
+  setTimeout(pintarPistaSobre, 0);
+}
+// Lo que hay en el formulario: categoría principal y, si hay dos, el reparto.
+function leerCategorias(){
+  const c1 = document.getElementById('f_cat').value;
+  if(cat2Activa()){
+    const c2 = document.getElementById('f_cat2').value, p = Number(document.getElementById('f_catpct').value)||50;
+    if(c2 && c2!==c1) return { categoria: p>=50 ? c1 : c2, categorias:[{ cat:c1, pct:p }, { cat:c2, pct:100-p }] };
+  }
+  return { categoria:c1, categorias:null };
+}
+// Pares [categoría, fracción] que tiene el formulario (para el aviso de sobres).
+function catsDelFormulario(){
+  const c1 = document.getElementById('f_cat'); if(!c1) return [];
+  if(cat2Activa()){
+    const c2 = document.getElementById('f_cat2').value, p = Number(document.getElementById('f_catpct').value)||50;
+    if(c2 && c2!==c1.value) return [[c1.value, p/100], [c2, (100-p)/100]];
+  }
+  return [[c1.value, 1]];
+}
+function casillaPorDividir(marcada){
+  return `<label class="field-check"><input type="checkbox" id="f_pordividir" ${marcada?'checked':''}>
+    <span>${ic('bandera',15)} Por dividir después<br><small style="color:var(--text-soft); font-weight:600;">Lo pagó una cuenta pero se va a repartir. Saldrá primero en "Hacer cuentas".</small></span></label>`;
+}
+
 // Las transferencias mueven dinero entre cuentas: cuentan para los saldos,
 // pero no como gasto/ingreso en los resúmenes de Visual.
 // Transferencias y ajustes de saldo cuentan para los saldos, pero no como gasto/ingreso en los resúmenes.
@@ -2107,7 +2228,7 @@ function gastosConCompras(){
   const hoy = hoyISO();
   const compras = tarjetaGastos.filter(t=>t.fecha && t.fecha<=hoy).map(t=>({
     id:'tc_'+t.id, descripcion:t.descripcion, monto:t.monto, fecha:t.fecha, quienPaga:t.quien, division:t.division,
-    porcentajes:t.porcentajes, categoria:t.categoria, capa:'Pareja', createdAt:t.createdAt, esCompraTC:true }));
+    porcentajes:t.porcentajes, categoria:t.categoria, categorias:t.categorias, capa:'Pareja', createdAt:t.createdAt, esCompraTC:true }));
   return gastos.filter(g=>!esTransfer(g)).concat(compras);
 }
 function gastosGenerales(){
@@ -2315,24 +2436,23 @@ function renderGastos(){
   const list = document.getElementById('gastosList');
   const selCat = document.getElementById('gastoCategoriaFiltro');
   if(selCat && selCat.value !== (filtroCategoriaGasto||'')) selCat.value = filtroCategoriaGasto || '';
+  document.getElementById('fgCat').classList.toggle('on', !!filtroCategoriaGasto);
+  document.getElementById('fgCatTxt').textContent = !filtroCategoriaGasto ? 'Categoría' : (filtroCategoriaGasto===CAT_SIN ? '⚠️ Sin categoría' : filtroCategoriaGasto);
 
   if(personaGastoFiltro!=='Todos' && !cuentaPorId(personaGastoFiltro)) personaGastoFiltro='Todos';
-  const segP = document.getElementById('personaGastoSegmented');
-  segP.style.display = cuentas.length>1 ? 'flex' : 'none';
-  segP.innerHTML = [{v:'Todos', t:'Todas'}].concat(cuentas.map(c=>({v:c.id, t:c.nombre})))
-    .map(o=>`<button class="${o.v===personaGastoFiltro?'active':''}" onclick="switchPersonaGastoFiltro('${o.v}')">${o.v==='Todos'?'🤝':`<span class="dot" style="background:${colorCuenta(o.v)[0]}"></span>`} ${esc(o.t)}</button>`).join('');
-
-  const banner = document.getElementById('filtroCategoriaBanner');
-  banner.innerHTML = filtroCategoriaGasto
-    ? `<div class="subtle-note">Filtrando por: <strong>${esc(filtroCategoriaGasto)}</strong>
-        <button class="btn btn-ghost btn-small" style="margin-left:8px;" onclick="quitarFiltroCategoriaGasto()">✕ Quitar filtro</button></div>`
-    : '';
+  const selCta = document.getElementById('gastoCuentaFiltro');
+  if(selCta){
+    selCta.innerHTML = `<option value="Todos">Todas</option>` + cuentas.map(c=>`<option value="${c.id}">${esc(c.nombre)}</option>`).join('');
+    selCta.value = personaGastoFiltro;
+    document.getElementById('fgCta').classList.toggle('on', personaGastoFiltro!=='Todos');
+    document.getElementById('fgCtaTxt').textContent = personaGastoFiltro==='Todos' ? 'Todas' : nombreCuenta(personaGastoFiltro);
+    document.getElementById('fgCta').style.display = cuentas.length>1 ? '' : 'none';
+  }
 
   let f = gastos;
-  if(currentCapaFiltro==='SinCategoria') f = gastos.filter(g=>!g.categoria);
-  else if(currentCapaFiltro!=='Todos') f = gastos.filter(g=>(g.capa||'Pareja')===currentCapaFiltro);
   if(personaGastoFiltro!=='Todos') f = f.filter(g=>parteDe(g.quienPaga, g.division, g.monto, personaGastoFiltro, g.porcentajes)>0);
-  if(filtroCategoriaGasto) f = f.filter(g=>g.categoria===filtroCategoriaGasto);
+  if(filtroCategoriaGasto===CAT_SIN) f = f.filter(g=>!g.categoria);
+  else if(filtroCategoriaGasto) f = f.filter(g=>tieneCat(g, filtroCategoriaGasto));
 
   const termino = (document.getElementById('gastoBuscar')?.value||'').trim();
   if(termino){
@@ -2345,35 +2465,60 @@ function renderGastos(){
   }
 
   if(f.length===0){
-    list.innerHTML = currentCapaFiltro==='SinCategoria'
+    list.innerHTML = filtroCategoriaGasto===CAT_SIN
       ? `<div class="empty-state"><span class="ic">✅</span>Todos tus gastos tienen categoría.</div>`
       : `<div class="empty-state"><span class="ic">🔍</span>Ningún gasto coincide con estos filtros. Prueba quitando alguno.</div>`;
     return;
   }
-  list.innerHTML = f.map(g=>`
-    <div class="receipt" style="--bar:${barBg(g.quienPaga, g.division)}">
+  list.innerHTML = f.map(gastoReciboHTML).join("");
+}
+// Etiquetas cortas junto a la descripción (de dónde viene el gasto o si está marcado).
+function etiquetasGasto(g){
+  const t = [];
+  if(g.porDividir && !g.liquidacionId) t.push(`<span class="mini flag">${ic('bandera',11)} Por dividir</span>`);
+  if(g.vinculoPlanId || g.origen==='plan-parcial') t.push(`<span class="mini plan">${g.origen==='plan-parcial'?'Plan parcial':'Plan'}</span>`);
+  if(g.origen==='cuota') t.push('<span class="mini">Cuota</span>');
+  if(g.origen==='deuda') t.push('<span class="mini">Deuda</span>');
+  if(g.origen==='tarjeta') t.push(`<span class="mini" title="No cuenta como gasto nuevo">${g.abonoId?'Abono TC':'Pago TC'}</span>`);
+  if(g.origen==='reembolso') t.push('<span class="mini">Transferencia</span>');
+  if(g.origen==='ajuste') t.push('<span class="mini">Ajuste</span>');
+  if(g.liquidacionId) t.push('<span class="mini">En cuentas</span>');
+  return t.join('');
+}
+function puntosQuien(valor, division){
+  return participantes(valor, division).map(id=>`<span class="dot" style="background:${colorCuenta(id)[0]}"></span>`).join('');
+}
+function categoriasHTML(g){
+  const cs = catsDe(g);
+  if(cs.length===1) return cs[0].cat ? `<div class="rc-cat">${esc(cs[0].cat)}</div>` : `<div class="rc-cat sin">Sin categoría</div>`;
+  return cs.map(c=>`<div class="rc-cat">${esc(c.cat)} · ${Math.round(c.pct)}%</div>`).join('');
+}
+// Descripción [etiquetas] / cuenta / fecha y hora · a la derecha el monto y debajo la categoría.
+function gastoReciboHTML(g){
+  const dividible = !g.liquidacionId && !esTransfer(g) && participantes(g.quienPaga, g.division).length===1;
+  return `
+    <div class="receipt ${g.porDividir && !g.liquidacionId ? 'marcado' : ''}" style="--bar:${barBg(g.quienPaga, g.division)}">
       <div class="receipt-row">
-        <div>
-          <div class="receipt-title">${esc(g.descripcion)||"(sin descripción)"}</div>
-          <div class="receipt-sub">${fechaHora(g)} · ${esc(etiquetaQuien(g.quienPaga, g.division, g.porcentajes))} ${g.categoria?('· '+esc(g.categoria)):''}</div>
-          ${!g.categoria?'<span class="tag pendiente">⚠️ Sin categoría</span>':''}
-          ${g.vinculoPlanId?'<span class="tag ejecutado">Desde plan</span>':''}
-          ${g.origen==='plan-parcial'?'<span class="tag">🗓️ Plan (parcial)</span>':''}
-          ${(g.capa==='Personal')?'<span class="tag personal">🙋 Personal</span>':''}
-          ${g.origen==='cuota'?'<span class="tag">📆 Cuota</span>':''}
-          ${g.origen==='deuda'?'<span class="tag">🤝 Deuda</span>':''}
-          ${g.origen==='tarjeta'?`<span class="tag">💳 ${g.abonoId?'Abono a':'Pago de'} tarjeta · no cuenta como gasto nuevo</span>`:''}
-          ${g.origen==='reembolso'?'<span class="tag">↔️ Transferencia</span>':''}
-          ${g.origen==='ajuste'?'<span class="tag">⚖️ Ajuste de saldo</span>':''}
-          ${g.liquidacionId?'<span class="tag">🧮 En cuentas</span>':''}
+        <div class="rc-izq">
+          <div class="rc-titulo"><span class="receipt-title rc-desc">${esc(g.descripcion)||"(sin descripción)"}</span>${etiquetasGasto(g)}</div>
+          <div class="receipt-sub rc-linea">${puntosQuien(g.quienPaga, g.division)}<span>${esc(etiquetaQuien(g.quienPaga, g.division, g.porcentajes))}</span></div>
+          <div class="receipt-sub">${fechaHora(g)}</div>
         </div>
-        <div class="receipt-amount num">- ${qh(g.monto)}</div>
+        <div class="rc-der">
+          <div class="receipt-amount num">- ${qh(g.monto)}</div>
+          ${categoriasHTML(g)}
+        </div>
       </div>
       <div class="actions-row">
         <button class="btn btn-ghost btn-small" onclick="editarGasto('${g.id}')">${IC.edit} Editar</button>
+        ${dividible ? `<button class="btn btn-ghost btn-small" onclick="togglePorDividir('${g.id}')">${ic('bandera',15)} ${g.porDividir?'Quitar marca':'Por dividir'}</button>` : ''}
         <button class="btn btn-ghost btn-small" onclick="eliminarGasto('${g.id}')">${IC.trash} Borrar</button>
       </div>
-    </div>`).join("");
+    </div>`;
+}
+function togglePorDividir(id){
+  const g = gastos.find(x=>x.id===id); if(!g) return;
+  col('gastos').doc(id).update({ porDividir: g.porDividir ? FieldValue.delete() : true });
 }
 function eliminarGasto(id){
   const gx = gastos.find(x=>x.id===id);
@@ -2399,10 +2544,13 @@ function editarGasto(id){
     <div class="field"><label>Fecha</label><input id="f_fecha" type="date" value="${g.fecha}"></div>
     <div class="field"><label>¿Qué cuenta paga?</label>${selectorQuien('f_quien', g.quienPaga, g.division, true, 'sugerirCapaSegunQuien()', { porcentajes:g.porcentajes, devolver:{ valor:g.quienPaga, division:g.division, porcentajes:g.porcentajes, monto:g.monto } })}</div>
     ${campoCapa(g.capa)}
-    <div class="field"><label>Categoría</label><select id="f_cat">${opcionesCategoria(CATEGORIAS, g.categoria)}</select></div>
+    ${campoCategorias(CATEGORIAS, g)}
+    <div id="sobreHint"></div>
+    ${g.liquidacionId ? '' : casillaPorDividir(g.porDividir)}
     ${g.origen ? `<p class="hint">Este gasto viene de: ${esc(g.origen)}. Editarlo aquí no cambia el registro original.</p>` : ''}
     <button class="btn btn-primary" onclick="guardarEdicionGasto('${id}')">Guardar cambios</button>`;
   document.getElementById('modalOverlay').classList.add('active');
+  pintarRepartoCat();
 }
 function guardarEdicionGasto(id){
   const descripcion=document.getElementById('f_desc').value.trim();
@@ -2410,9 +2558,12 @@ function guardarEdicionGasto(id){
   const fecha=document.getElementById('f_fecha').value;
   const capa=document.getElementById('f_capa').value;
   const quien=leerQuien('f_quien'); if(!quien) return;
-  const categoria=document.getElementById('f_cat').value;
+  const cats=leerCategorias();
+  const chk=document.getElementById('f_pordividir');
   if(!monto||!fecha){ alert("Falta el monto o la fecha."); return; }
-  col('gastos').doc(id).update({ descripcion, monto, fecha, capa, quienPaga:quien.valor, division:quien.division, porcentajes:quien.porcentajes, categoria });
+  col('gastos').doc(id).update({ descripcion, monto, fecha, capa, quienPaga:quien.valor, division:quien.division, porcentajes:quien.porcentajes,
+    categoria:cats.categoria, categorias: cats.categorias || FieldValue.delete(),
+    ...(chk ? { porDividir: chk.checked ? true : FieldValue.delete() } : {}) });
   closeModal();
 }
 function sugerirCapaSegunQuien(){
@@ -3498,9 +3649,9 @@ function renderSuscripciones(){
   const ordenadas = [...suscripciones].sort((a,b)=>{
     if(!!a.activa !== !!b.activa) return (b.activa?1:0) - (a.activa?1:0);
     if(subsOrden==='calendario'){
-      const da = proximoCobroDate(a), dbb = proximoCobroDate(b);
-      if(!da && !dbb) return 0; if(!da) return 1; if(!dbb) return -1;
-      return da - dbb;
+      const da = Number(a.diaCobro)||99, dbb = Number(b.diaCobro)||99;   // del día 1 al 31
+      if(da !== dbb) return da - dbb;
+      return String(a.servicio||'').localeCompare(String(b.servicio||''), 'es');
     }
     return Number(b.monto||0) - Number(a.monto||0);
   });
@@ -3757,8 +3908,7 @@ function renderChartCategoria(){
   const porCat = {};
   gastosParaVista(v).filter(g=>g.fecha && g.fecha.startsWith(prefijo)).forEach(g=>{
     const monto = gastoDeVista(g, v); if(monto<=0) return;
-    const c = g.categoria||'Sin categoría';
-    porCat[c] = (porCat[c]||0) + monto;
+    catsDe(g).forEach(x=>{ const c = x.cat||'Sin categoría'; porCat[c] = (porCat[c]||0) + monto*x.pct/100; });
   });
   const labels = Object.keys(porCat), data = Object.values(porCat);
   if(chartCategoriaInst) chartCategoriaInst.destroy();
@@ -3893,7 +4043,7 @@ function renderAjustesForm(){
     ${ESPACIO_CIFRADO ? `<button class="btn btn-ghost" style="width:100%; margin-bottom:12px;" onclick="abrirPrivacidad()">${ic('candado',16)} Privacidad y clave</button>` : ''}
     ${ESPACIO_LEGACY ? `<button class="btn btn-ghost" style="width:100%; margin-bottom:12px;" onclick="abrirInvitaciones()">${ic('invitar',16)} Invitar a alguien</button>` : ''}
     <button class="btn btn-primary" onclick="guardarAjustes()">Guardar ajustes</button>
-    <div class="hint" style="text-align:center; margin:14px 0 0;">Versión 17 nov 2026 · v5 · hacer cuentas${ESPACIO_CIFRADO ? ' · 🔒 espacio cifrado' : ''}</div>`;
+    <div class="hint" style="text-align:center; margin:14px 0 0;">Versión 24 nov 2026 · v6 · gastos más limpios${ESPACIO_CIFRADO ? ' · 🔒 espacio cifrado' : ''}</div>`;
 }
 function agregarCuentaBorrador(){
   const b = ajustesBorrador; if(b.cuentas.length>=MAX_CUENTAS) return;
@@ -4143,8 +4293,9 @@ function openAddModal(){
       <div class="field"><label>Fecha</label><input id="f_fecha" type="date" value="${hoyISO()}"></div>
       <div class="field"><label>¿Qué cuenta paga?</label>${selectorQuien('f_quien', ultimaCuenta(), null, true, 'sugerirCapaSegunQuien()')}</div>
       ${campoCapa('Personal')}
-      <div class="field"><label>Categoría</label><select id="f_cat">${opcionesCategoria(CATEGORIAS, null)}</select></div>
+      ${campoCategorias(CATEGORIAS, null)}
       <div id="sobreHint"></div>
+      ${casillaPorDividir(false)}
       <button class="btn btn-primary" onclick="guardarGasto()">Guardar gasto</button>`;
   }
   else if(currentView==='movimientos' && currentMovSegment==='planificacion'){
@@ -4251,9 +4402,11 @@ function guardarGasto(){
   const fecha=document.getElementById('f_fecha').value;
   const capa=document.getElementById('f_capa').value;
   const quien=leerQuien('f_quien'); if(!quien) return;
-  const categoria=document.getElementById('f_cat').value;
+  const cats=leerCategorias();
+  const porDividir=!!(document.getElementById('f_pordividir')||{}).checked;
   if(!monto||!fecha){ alert("Falta el monto o la fecha."); return; }
-  col('gastos').add({ descripcion, monto, fecha, quienPaga:quien.valor, division:quien.division, porcentajes:quien.porcentajes, categoria, capa,
+  col('gastos').add({ descripcion, monto, fecha, quienPaga:quien.valor, division:quien.division, porcentajes:quien.porcentajes, categoria:cats.categoria, capa,
+    ...(cats.categorias ? { categorias:cats.categorias } : {}), ...(porDividir ? { porDividir:true } : {}),
     createdAt: FieldValue.serverTimestamp() });
   recordarCuenta(quien.valor);
   closeModal();
@@ -4414,7 +4567,7 @@ function ocrLimpiarDescripcion(s){
   s = String(s||'')
     .replace(/[\\|].*$/,'')              // direcciones tipo "DISNEYPLUS.COM\2400 West..."
     .replace(/W(?=\d{3,}).*$/,'')        // el OCR a veces lee "\" como "W"
-    .replace(/[-–—:·•]+\s*$/,'')
+    .replace(/[-–—:·•+]+\s*$/,'')
     .replace(/\s{2,}/g,' ').trim();
   const letras = s.replace(/[^A-Za-zÁÉÍÓÚÑáéíóúñ]/g,'');
   // Si viene todo en MAYÚSCULAS, pasarlo a formato Título (dejando siglas cortas como ACH).
@@ -4617,8 +4770,10 @@ function ocrWorker(){
   }
   return ocrWorkerPromesa;
 }
-// Escala de grises con el canal más oscuro + contraste: así los montos en rojo o azul
-// se leen como texto negro. Si la app del banco está en modo oscuro, se invierte.
+// Escala de grises + contraste para que los montos en rojo, verde o azul se lean como texto negro.
+// Fondo claro: se usa el canal más oscuro (el color resalta como oscuro).
+// Fondo oscuro (app del banco en modo oscuro): se usa el canal más claro y luego se invierte;
+// si no, los montos en rojo o verde quedaban tan oscuros como el fondo y no se leían.
 function ocrPrepararImagen(file){
   return new Promise((ok, mal)=>{
     const url = URL.createObjectURL(file);
@@ -4631,12 +4786,14 @@ function ocrPrepararImagen(file){
       ctx.drawImage(img, 0, 0, c.width, c.height);
       URL.revokeObjectURL(url);
       const d = ctx.getImageData(0, 0, c.width, c.height), px = d.data;
-      let suma = 0, min = 255, max = 0;
+      let lum = 0;
+      for(let i=0; i<px.length; i+=4) lum += 0.299*px[i] + 0.587*px[i+1] + 0.114*px[i+2];
+      const invertir = (lum/(px.length/4)) < 110;
+      let min = 255, max = 0;
       for(let i=0; i<px.length; i+=4){
-        const v = Math.min(px[i], px[i+1], px[i+2]);
-        px[i] = v; suma += v; if(v<min) min=v; if(v>max) max=v;
+        const v = invertir ? Math.max(px[i], px[i+1], px[i+2]) : Math.min(px[i], px[i+1], px[i+2]);
+        px[i] = v; if(v<min) min=v; if(v>max) max=v;
       }
-      const invertir = (suma/(px.length/4)) < 110;
       const rango = Math.max(1, max-min);
       for(let i=0; i<px.length; i+=4){
         let v = (px[i]-min) * 255 / rango;
@@ -4751,7 +4908,7 @@ let hc = null; // estado de la herramienta mientras está abierta
 function gastosParaCuentas(){
   const desde = new Date(); desde.setDate(desde.getDate()-60);
   const desdeISO = ocrISO(desde);
-  return gastos.filter(g=>!esTransfer(g) && !g.liquidacionId && g.fecha>=desdeISO
+  return gastos.filter(g=>!esTransfer(g) && !g.liquidacionId && (g.fecha>=desdeISO || g.porDividir)
     && participantes(g.quienPaga, g.division).length===1 && cuentaPorId(g.quienPaga));
 }
 function abrirHacerCuentas(){
@@ -4854,7 +5011,7 @@ function hcGastoHTML(g){
   const on = !!hc.sel[g.id], pc = hcPctsDe(g.id), dos = hc.part.length===2;
   return `<div class="hc-gasto ${on?'on':''}">
     <label class="hc-fila"><input type="checkbox" ${on?'checked':''} onchange="hcToggle('${g.id}', this.checked)">
-      <span class="hc-txt"><b>${esc(g.descripcion)||'(sin descripción)'}</b>
+      <span class="hc-txt"><b>${g.porDividir?`<span class="hc-flag">${ic('bandera',12)}</span>`:''}${esc(g.descripcion)||'(sin descripción)'}</b>
         <small>${fechaHora(g)} · pagó <span class="dot" style="background:${colorCuenta(g.quienPaga)[0]}"></span> ${esc(nombreCuenta(g.quienPaga))}</small></span>
       <span class="num">${qh(g.monto)}</span></label>
     ${on ? `<div class="hc-reparto">${repartoMonto('dividido', hc.part, pc, Number(g.monto||0)).map(x=>
@@ -4877,11 +5034,15 @@ function renderHcLista(){
   if(!lista.length){ cont.innerHTML = `<div class="ocr-estado">No hay gastos de una sola cuenta en los últimos 60 días.</div>`; return; }
   const elegidos = lista.filter(g=>hc.sel[g.id]);
   const t = (hc.q||'').trim().toLowerCase();
-  const resto = lista.filter(g=>!hc.sel[g.id] && hcCoincide(g, t));
+  // Los marcados "por dividir" van aparte y no se esconden al minimizar: son los que más se usan aquí.
+  const marcados = lista.filter(g=>!hc.sel[g.id] && g.porDividir && hcCoincide(g, t));
+  const resto = lista.filter(g=>!hc.sel[g.id] && !g.porDividir && hcCoincide(g, t));
   let h = '';
   if(elegidos.length) h += `<div class="hc-grupo">Elegidos (${elegidos.length})</div>` + elegidos.map(hcGastoHTML).join('');
+  if(marcados.length) h += `<div class="hc-grupo hc-grupo-flag"><span>${ic('bandera',12)} Por dividir (${marcados.length})</span>
+      <button class="btn btn-ghost btn-small" onclick="hcElegirMarcados()">Elegir ${marcados.length>1?'todos':'este'}</button></div>` + marcados.map(hcGastoHTML).join('');
   if(hc.min){
-    if(!elegidos.length) h += `<div class="hc-vacio">Lista minimizada. Toca «Mostrar todos» para elegir gastos.</div>`;
+    if(!elegidos.length && !marcados.length) h += `<div class="hc-vacio">Lista minimizada. Toca «Mostrar todos» para elegir gastos.</div>`;
   } else {
     h += `<div class="hc-grupo">${elegidos.length ? 'Por elegir' : 'Elige los que se van a repartir'}${t ? ` · ${resto.length} encontrados` : ''}</div>`;
     h += resto.length ? resto.map(hcGastoHTML).join('') : `<div class="hc-vacio">Ningún gasto coincide con «${esc(hc.q)}».</div>`;
@@ -4910,6 +5071,11 @@ function hcBarraHTML(r){
   </div>`;
 }
 function hcMinimizar(){ hc.min = !hc.min; renderHacerCuentas(); }
+function hcElegirMarcados(){
+  gastosParaCuentas().filter(g=>g.porDividir).forEach(g=>{ hc.sel[g.id] = true; });
+  if(hc.modo==='libre') hcRecalcularGlobal();
+  renderHacerCuentas();
+}
 function hcBuscar(v){ hc.q = v; renderHcLista(); }
 function hcDetalle(){ hc.detalle = !hc.detalle; renderHacerCuentas(); }
 function hcSuma(p){ return hc.part.reduce((t,i)=>t+(Number(p[i])||0),0); }
@@ -4948,9 +5114,9 @@ function aplicarHacerCuentas(estado){
   const batch = lote();
   const detalle = r.sel.map(g=>{
     const pc = { ...hcPctsDe(g.id) };
-    batch.update(col('gastos').doc(g.id), { quienPaga:'dividido', division:hc.part.slice(), porcentajes:pc, capa:'Pareja', liquidacionId:ref.id });
+    batch.update(col('gastos').doc(g.id), { quienPaga:'dividido', division:hc.part.slice(), porcentajes:pc, capa:'Pareja', liquidacionId:ref.id, porDividir:FieldValue.delete() });
     return { id:g.id, descripcion:g.descripcion||'', monto:Number(g.monto||0), fecha:g.fecha,
-      prev:{ quienPaga:g.quienPaga, division:g.division||null, porcentajes:g.porcentajes||null, capa:g.capa||'Pareja' }, porcentajes:pc };
+      prev:{ quienPaga:g.quienPaga, division:g.division||null, porcentajes:g.porcentajes||null, capa:g.capa||'Pareja', porDividir:!!g.porDividir }, porcentajes:pc };
   });
   batch.set(ref, { fecha:hoyISO(), estado: r.deudas.length ? estado : 'pagado', deudas:r.deudas, gastos:detalle,
     total:Math.round(r.total*100)/100, participantes:hc.part.slice(), createdAt: FieldValue.serverTimestamp() });
@@ -4980,7 +5146,8 @@ function deshacerCuentas(lid){
   (l.gastos||[]).forEach(x=>{
     if(!gastos.some(g=>g.id===x.id)) return;
     batch.update(col('gastos').doc(x.id), { quienPaga:x.prev.quienPaga, division:x.prev.division||null,
-      porcentajes:x.prev.porcentajes||null, capa:x.prev.capa||'Pareja', liquidacionId:FieldValue.delete() });
+      porcentajes:x.prev.porcentajes||null, capa:x.prev.capa||'Pareja', liquidacionId:FieldValue.delete(),
+      porDividir: x.prev.porDividir ? true : FieldValue.delete() });
   });
   batch.delete(col('liquidaciones').doc(lid));
   batch.commit().catch(e=>alert("No se pudo deshacer: "+e.message));
@@ -5026,10 +5193,10 @@ const CATS_SIN_SOBRE = [CAT_TRANSFER, CAT_AJUSTE];
 function listaSobres(){ return Array.isArray(ajustes.sobres) ? ajustes.sobres.filter(s=>s && s.categoria && Number(s.monto)>0) : []; }
 function diasRestantesMes(){ const h = new Date(); return new Date(h.getFullYear(), h.getMonth()+1, 0).getDate() - h.getDate() + 1; }
 function movimientosCategoria(categoria, prefijo){
-  const g = gastos.filter(x=>x.categoria===categoria && x.origen!=='tarjeta' && x.fecha && x.fecha.startsWith(prefijo))
-    .map(x=>({ valor:x.quienPaga, division:x.division, porcentajes:x.porcentajes, monto:x.monto }));
-  const t = tarjetaGastos.filter(x=>x.categoria===categoria && x.fecha && x.fecha.startsWith(prefijo))
-    .map(x=>({ valor:x.quien, division:x.division, porcentajes:x.porcentajes, monto:x.monto }));
+  const g = gastos.filter(x=>tieneCat(x, categoria) && x.origen!=='tarjeta' && x.fecha && x.fecha.startsWith(prefijo))
+    .map(x=>({ valor:x.quienPaga, division:x.division, porcentajes:x.porcentajes, monto:Number(x.monto||0)*fraccionCat(x, categoria) }));
+  const t = tarjetaGastos.filter(x=>tieneCat(x, categoria) && x.fecha && x.fecha.startsWith(prefijo))
+    .map(x=>({ valor:x.quien, division:x.division, porcentajes:x.porcentajes, monto:Number(x.monto||0)*fraccionCat(x, categoria) }));
   return g.concat(t);
 }
 function gastadoEnCategoria(categoria, quien, prefijo){
@@ -5167,13 +5334,16 @@ function pintarPistaSobre(){
   const el = document.getElementById('sobreHint'); if(!el) return;
   const cat = document.getElementById('f_cat'), sel = document.getElementById('f_quien');
   if(!cat){ el.innerHTML=''; return; }
-  const monto = parseFloat((document.getElementById('f_monto')||{}).value)||0;
+  const montoTotal = parseFloat((document.getElementById('f_monto')||{}).value)||0;
   let ids = [];
   if(sel){ ids = sel.value==='dividido' ? cuentasMarcadas('f_quien') : [sel.value]; }
-  const sobres = listaSobres().filter(s=>s.categoria===cat.value && (s.quien==='todos' || ids.includes(s.quien)));
+  const pares = catsDelFormulario();
+  const sobres = [];
+  pares.forEach(([c, fr])=>listaSobres().filter(s=>s.categoria===c && (s.quien==='todos' || ids.includes(s.quien))).forEach(s=>sobres.push({ s, fr })));
   if(!sobres.length){ el.innerHTML=''; return; }
-  el.innerHTML = sobres.map(s=>{
+  el.innerHTML = sobres.map(({ s, fr })=>{
     const e = estadoSobre(s);
+    const monto = montoTotal*fr;
     let parte = monto;
     if(s.quien!=='todos' && sel){
       const pc = sel.value==='dividido' && divCtx.f_quien ? divCtx.f_quien.exact : null;
@@ -5181,7 +5351,7 @@ function pintarPistaSobre(){
     }
     const queda = Math.round((e.restante - parte)*100)/100;
     return `<div class="sobre-hint sobre-${queda<0?'pasado':(e.monto>0 && (e.gastado+parte)/e.monto>=0.85?'ojo':'bien')}">
-      ✉️ ${esc(nombreQuienSobre(s.quien))}: ${monto>0
+      ✉️ ${esc(nombreQuienSobre(s.quien))}${pares.length>1?` · ${esc(s.categoria)}`:''}: ${monto>0
         ? (queda>=0 ? `con este gasto quedan <b>${q(queda)}</b> de ${q(e.monto)}` : `con este gasto <b>se pasa por ${q(-queda)}</b>`)
         : (e.restante>=0 ? `quedan <b>${q(e.restante)}</b> de ${q(e.monto)} este mes` : `ya se pasó por <b>${q(-e.restante)}</b>`)}
     </div>`;
@@ -5189,7 +5359,8 @@ function pintarPistaSobre(){
 }
 ['change','input'].forEach(tipo=>document.addEventListener(tipo, e=>{
   const id = e.target && e.target.id || '';
-  if(id==='f_cat' || id==='f_monto' || id.startsWith('f_quien')) setTimeout(pintarPistaSobre, 0);
+  if(id==='f_cat' || id==='f_cat2' || id==='f_catpct' || id==='f_monto' || id.startsWith('f_quien')) setTimeout(pintarPistaSobre, 0);
+  if(id==='f_monto' && document.getElementById('cat2Box')) pintarRepartoCat();
 }));
 
 // ================= HOY PUEDES GASTAR =================
